@@ -6,6 +6,9 @@
 #   qa    -> {front}, {back}, {distractors}
 #   cloze -> {text}, {extra}, {distractors}
 #   list  -> {title}, {items}, {extra}
+#   typed -> {prompt}, {answer}, {hints}, {extra}
+#   image_occlusion -> {image}, {occlusion}, {header}, {back_extra}, {comments}
+# Every type also supports {source}, {deck}, and {tags}.
 #
 # Example: target the stock "Basic" note type for qa Facts.
 # [qa."Basic"]
@@ -16,3 +19,7 @@
 # [cloze."Cloze"]
 # Text       = "{text}"
 # "Back Extra" = "{extra}"
+#
+# To use a mapping, set the matching model in config.toml, for example:
+# [target_note_types]
+# qa = "Basic"

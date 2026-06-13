@@ -6,6 +6,7 @@ the POSTed JSON body, so we dispatch the mock by action name.
 """
 
 import json
+import base64
 
 import pytest
 import requests
@@ -113,13 +114,46 @@ def test_add_notes_counts_added_and_skipped():
 def test_ensure_note_types_creates_missing_models_with_cloze_flag():
     from scripts.note_types import MONO_NOTE_TYPES
     created = []
+    updated_templates = []
+    updated_styling = []
     _register({
-        "modelNames": ["MONO Basic"],  # Cloze + Overlapping missing
+        "modelNames": ["MONO Basic"],  # Other bundled models are missing.
         "createModel": lambda p: created.append(p["params"]) or {"id": 1},
+        "updateModelTemplates": lambda p: updated_templates.append(p["params"]),
+        "updateModelStyling": lambda p: updated_styling.append(p["params"]),
     })
     AnkiConnect(URL).ensure_note_types(MONO_NOTE_TYPES.values())
     names = {c["modelName"] for c in created}
-    assert names == {"MONO Cloze", "MONO Overlapping"}
+    assert names == {"MONO Cloze", "MONO Overlapping", "MONO Type"}
     cloze_payload = next(c for c in created if c["modelName"] == "MONO Cloze")
     assert cloze_payload["isCloze"] is True
     assert "Text" in cloze_payload["inOrderFields"]
+    assert updated_templates[0]["model"]["name"] == "MONO Basic"
+    assert "Card 1" in updated_templates[0]["model"]["templates"]
+    assert updated_styling[0]["model"]["name"] == "MONO Basic"
+    assert "_outfit-variable.ttf" in updated_styling[0]["model"]["css"]
+
+
+@responses.activate
+def test_ensure_models_exist_reports_missing_external_type():
+    _register({"modelNames": ["Basic", "MONO Basic"]})
+    client = AnkiConnect(URL)
+    with pytest.raises(AnkiConnectError, match="Image Occlusion"):
+        client.ensure_models_exist(["Basic", "Image Occlusion"])
+
+
+@responses.activate
+def test_store_media_file_sends_base64(tmp_path):
+    media = tmp_path / "diagram.png"
+    media.write_bytes(b"png bytes")
+    sent = {}
+
+    def store(payload):
+        sent.update(payload["params"])
+        return payload["params"]["filename"]
+
+    _register({"storeMediaFile": store})
+    result = AnkiConnect(URL).store_media_file(media)
+
+    assert result == "diagram.png"
+    assert sent["data"] == base64.b64encode(b"png bytes").decode("ascii")

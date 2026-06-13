@@ -6,6 +6,7 @@ genanki objects and write a real .apkg, then assert on the resulting package
 """
 
 import zipfile
+import json
 
 import pytest
 
@@ -91,3 +92,12 @@ def test_export_rejects_unknown_model(tmp_path):
     bad = AnkiNote(model="Nonexistent", deck="X", fields={"a": "b"}, tags=[])
     with pytest.raises(KeyError):
         export_apkg([bad], tmp_path / "x.apkg")
+
+
+def test_export_packages_bundled_fonts(tmp_path):
+    out = tmp_path / "fonts.apkg"
+    export_apkg([_basic_note()], out)
+    with zipfile.ZipFile(out) as zf:
+        media = json.loads(zf.read("media"))
+    assert "_dmserifdisplay-regular.ttf" in media.values()
+    assert "_outfit-variable.ttf" in media.values()

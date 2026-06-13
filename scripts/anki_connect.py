@@ -11,7 +11,9 @@ endpoint is unreachable, callers fall back to the .apkg exporter.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable
 
 import requests
@@ -80,11 +82,28 @@ class AnkiConnect:
         return list(self._invoke("modelNames"))
 
     def ensure_note_types(self, note_types: Iterable[NoteType]) -> list[str]:
-        """Create any MONO models that don't yet exist. Returns created names."""
+        """Create missing MONO models and refresh existing templates/styling."""
         existing = set(self.model_names())
         created: list[str] = []
         for nt in note_types:
             if nt.name in existing:
+                self._invoke(
+                    "updateModelTemplates",
+                    model={
+                        "name": nt.name,
+                        "templates": {
+                            template.name: {
+                                "Front": template.qfmt,
+                                "Back": template.afmt,
+                            }
+                            for template in nt.templates
+                        },
+                    },
+                )
+                self._invoke(
+                    "updateModelStyling",
+                    model={"name": nt.name, "css": nt.css},
+                )
                 continue
             self._invoke(
                 "createModel",
@@ -99,6 +118,29 @@ class AnkiConnect:
             )
             created.append(nt.name)
         return created
+
+    def ensure_models_exist(self, names: Iterable[str]) -> None:
+        """Fail clearly when a configured stock/community model is absent."""
+        required = set(names)
+        if not required:
+            return
+        missing = required - set(self.model_names())
+        if missing:
+            joined = ", ".join(sorted(missing))
+            raise AnkiConnectError(
+                f"required Anki note type(s) not installed: {joined}"
+            )
+
+    # --- media --------------------------------------------------------------
+
+    def store_media_file(self, path: str | Path) -> str:
+        """Copy one local file into Anki's collection media directory."""
+        path = Path(path)
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return str(self._invoke("storeMediaFile", filename=path.name, data=data))
+
+    def store_media_files(self, paths: Iterable[Path]) -> list[str]:
+        return [self.store_media_file(path) for path in paths]
 
     # --- notes --------------------------------------------------------------
 

@@ -57,6 +57,38 @@ def test_valid_list_fact():
     assert fact.content["items"][0] == "Prophase"
 
 
+def test_valid_typed_fact_with_progressive_hints():
+    fact = Fact.from_dict({
+        "type": "typed",
+        "content": {
+            "prompt": "Chemical formula for water?",
+            "answer": "H2O",
+            "hints": ["Three characters", "Starts with H"],
+        },
+        "deck": "Chemistry",
+        "tags": [],
+    })
+    assert fact.content["hints"] == ["Three characters", "Starts with H"]
+
+
+def test_valid_image_occlusion_fact():
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": "heart.png",
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.3, "height": 0.1},
+                {"shape": "ellipse", "left": 0.5, "top": 0.3,
+                 "rx": 0.1, "ry": 0.08},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    assert len(fact.content["masks"]) == 2
+
+
 def test_qa_fact_with_graded_distractors():
     fact = Fact.from_dict(
         {
@@ -138,6 +170,54 @@ def test_distractors_not_allowed_on_list():
                 "distractors": [{"text": "X", "grade": "near"}],
             }
         )
+
+
+def test_typed_supports_at_most_three_hints():
+    with pytest.raises(CardValidationError, match="three hints"):
+        Fact.from_dict({
+            "type": "typed",
+            "content": {"prompt": "Q", "answer": "A", "hints": ["1", "2", "3", "4"]},
+            "deck": "D",
+            "tags": [],
+        })
+
+
+def test_image_occlusion_rejects_out_of_bounds_mask():
+    with pytest.raises(CardValidationError, match="between 0 and 1"):
+        Fact.from_dict({
+            "type": "image_occlusion",
+            "content": {
+                "image": "x.png",
+                "masks": [{"shape": "rect", "left": 1.2, "top": 0,
+                           "width": 0.2, "height": 0.2}],
+            },
+            "deck": "D",
+            "tags": [],
+        })
+
+
+def test_image_occlusion_rejects_invalid_card_group():
+    with pytest.raises(CardValidationError, match="positive integer"):
+        Fact.from_dict({
+            "type": "image_occlusion",
+            "content": {
+                "image": "x.png",
+                "masks": [{"shape": "rect", "left": 0.1, "top": 0.2,
+                           "width": 0.2, "height": 0.2, "card": 0}],
+            },
+            "deck": "D",
+            "tags": [],
+        })
+
+
+def test_tags_must_be_a_list_not_a_string():
+    with pytest.raises(CardValidationError, match="tags must be a list"):
+        Fact.from_dict({
+            "type": "qa",
+            "content": {"front": "Q", "back": "A"},
+            "deck": "D",
+            "tags": "auto",
+        })
 
 
 def test_empty_deck_rejected():

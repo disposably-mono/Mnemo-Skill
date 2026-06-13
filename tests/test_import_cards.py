@@ -11,6 +11,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from scripts.anki_connect import AddResult
 from scripts.card_schema import Fact, dump_facts
 from scripts.import_cards import (
@@ -30,6 +32,8 @@ class FakeClient:
         self.ensured_note_types = False
         self.added = []
         self.synced = False
+        self.ensured_models = []
+        self.stored_media = []
 
     def is_available(self):
         return self._available
@@ -40,6 +44,13 @@ class FakeClient:
 
     def ensure_deck(self, name):
         self.ensured_decks.append(name)
+
+    def ensure_models_exist(self, names):
+        self.ensured_models.extend(names)
+
+    def store_media_files(self, paths):
+        self.stored_media.extend(paths)
+        return [path.name for path in paths]
 
     def add_notes(self, notes):
         self.added.extend(notes)
@@ -231,6 +242,61 @@ def test_import_applies_default_deck_auto_tag_and_target_model(tmp_path):
     assert note.model == "Basic"
     assert note.deck == "Inbox"
     assert note.tags == ["mnemo"]
+    assert client.ensured_models == ["Basic"]
+
+
+def test_live_image_occlusion_uploads_image(tmp_path):
+    image = tmp_path / "diagram.png"
+    image.write_bytes(b"image")
+    jsonl = tmp_path / "io.jsonl"
+    jsonl.write_text(
+        '{"type":"image_occlusion","content":{"image":"diagram.png",'
+        '"masks":[{"shape":"rect","left":0.1,"top":0.2,'
+        '"width":0.3,"height":0.2}]},"deck":"Anatomy","tags":[]}\n'
+    )
+    client = FakeClient(available=True)
+
+    import_cards(jsonl, client=client)
+
+    assert client.added[0].model == "Image Occlusion"
+    assert client.ensured_models == ["Image Occlusion"]
+    assert image in client.stored_media
+
+
+def test_offline_image_occlusion_requires_live_anki(tmp_path):
+    image = tmp_path / "diagram.png"
+    image.write_bytes(b"image")
+    jsonl = tmp_path / "io.jsonl"
+    jsonl.write_text(
+        '{"type":"image_occlusion","content":{"image":"diagram.png",'
+        '"masks":[{"shape":"rect","left":0.1,"top":0.2,'
+        '"width":0.3,"height":0.2}]},"deck":"Anatomy","tags":[]}\n'
+    )
+    with pytest.raises(RuntimeError, match="live AnkiConnect"):
+        import_cards(jsonl, client=FakeClient(available=False))
+
+
+def test_main_reports_live_only_image_occlusion_without_traceback(tmp_path, capsys):
+    image = tmp_path / "diagram.png"
+    image.write_bytes(b"image")
+    jsonl = tmp_path / "io.jsonl"
+    jsonl.write_text(
+        '{"type":"image_occlusion","content":{"image":"diagram.png",'
+        '"masks":[{"shape":"rect","left":0.1,"top":0.2,'
+        '"width":0.3,"height":0.2}]},"deck":"Anatomy","tags":[]}\n'
+    )
+
+    code = main([
+        str(jsonl),
+        "--url", "http://localhost:18765",
+        "--config", str(tmp_path / "absent.toml"),
+        "--mappings", str(tmp_path / "absent-mappings.toml"),
+    ])
+
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "live AnkiConnect" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_main_returns_zero_and_prints_fallback_summary(tmp_path, capsys):

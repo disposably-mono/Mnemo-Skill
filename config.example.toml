@@ -22,3 +22,7 @@ auto_tag = "auto"
 qa = "MONO Basic"
 cloze = "MONO Cloze"
 list = "MONO Overlapping"
+typed = "MONO Type"
+# Native Anki 23.10+ note type. A renamed/localized model also needs a matching
+# field block in mappings.toml.
+image_occlusion = "Image Occlusion"

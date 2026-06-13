@@ -5,13 +5,14 @@ from scripts.note_types import (
     MONO_CLOZE,
     MONO_NOTE_TYPES,
     MONO_OVERLAPPING,
+    MONO_TYPE,
     referenced_fields,
 )
 
-EXPECTED_NAMES = {"MONO Basic", "MONO Cloze", "MONO Overlapping"}
+EXPECTED_NAMES = {"MONO Basic", "MONO Cloze", "MONO Overlapping", "MONO Type"}
 
 
-def test_registry_has_the_three_v1_note_types():
+def test_registry_has_all_bundled_note_types():
     assert set(MONO_NOTE_TYPES) == EXPECTED_NAMES
     for name, nt in MONO_NOTE_TYPES.items():
         assert nt.name == name
@@ -37,6 +38,7 @@ def test_cloze_flags_are_correct():
     assert MONO_CLOZE.is_cloze is True
     assert MONO_OVERLAPPING.is_cloze is True
     assert MONO_BASIC.is_cloze is False
+    assert MONO_TYPE.is_cloze is False
 
 
 def test_cloze_models_use_cloze_replacement():
@@ -61,6 +63,15 @@ def test_design_system_port_is_present_in_css():
     assert "Outfit" in css
     assert "DM Mono" in css
     assert "#588157" in css  # fern (dark-theme accent)
+    assert "fonts.googleapis.com" not in css
+    assert "_outfit-variable.ttf" in css
+
+
+def test_typed_note_type_uses_native_answer_and_hint_filters():
+    template = MONO_TYPE.templates[0]
+    assert "{{type:Answer}}" in template.qfmt
+    assert "{{type:Answer}}" in template.afmt
+    assert "{{hint:Hint 1}}" in template.qfmt
 
 
 def test_referenced_fields_ignores_builtins_and_handles_prefixes():

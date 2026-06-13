@@ -57,11 +57,27 @@ class NoteType:
 # --------------------------------------------------------------------------
 
 MONO_CSS = """\
-/* MONO note-type styling — ported from colors_and_type.css.
-   Default .card = light theme; .nightMode = dark theme (Anki convention).
-   TODO(phase-3): bundle DM fonts as media (_dmserif.woff2, ...) for offline
-   mobile; @import below covers desktop/AnkiWeb in the meantime. */
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500&display=swap');
+/* MONO note-type styling — ported from colors_and_type.css. */
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('_dmserifdisplay-regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('_dmmono-regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('_dmmono-medium.ttf');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Outfit';
+  src: url('_outfit-variable.ttf');
+  font-weight: 100 900;
+}
 
 .card {
   --bg: #EAF0CE;            /* beige ground (light) */
@@ -152,11 +168,21 @@ ol.mono-list li { margin: 6px 0; }
   letter-spacing: 0.12em;
   color: var(--text-muted);
 }
+
+.mono-hints { margin-top: 18px; }
+.mono-hints a {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+#typeans { font-family: var(--font-mono); }
 """
 
 
 # --------------------------------------------------------------------------
-# The three v1 note types.
+# Bundled MONO note types.
 # --------------------------------------------------------------------------
 
 _DISTRACTORS_BLOCK = "{{#Distractors}}{{Distractors}}{{/Distractors}}"
@@ -222,7 +248,35 @@ MONO_OVERLAPPING = NoteType(
     is_cloze=True,
 )
 
+MONO_TYPE = NoteType(
+    name="MONO Type",
+    fields=("Prompt", "Answer", "Hint 1", "Hint 2", "Hint 3", "Extra", "Source"),
+    templates=(
+        CardTemplate(
+            name="Typed Answer",
+            qfmt=(
+                '<div class="mono-label">Type the answer</div>'
+                '<div class="mono-q">{{Prompt}}</div>'
+                '<div class="mono-hints">'
+                '{{#Hint 1}}{{hint:Hint 1}}{{/Hint 1}}'
+                '{{#Hint 2}}<br>{{hint:Hint 2}}{{/Hint 2}}'
+                '{{#Hint 3}}<br>{{hint:Hint 3}}{{/Hint 3}}'
+                '</div>{{type:Answer}}'
+            ),
+            afmt=(
+                '<div class="mono-label">Type the answer</div>'
+                '<div class="mono-q">{{Prompt}}</div>'
+                '<hr id="answer">{{type:Answer}}'
+                '<div class="mono-a">{{Answer}}</div>'
+                '{{#Extra}}<div class="mono-a">{{Extra}}</div>{{/Extra}}'
+                + _SOURCE_BLOCK
+            ),
+        ),
+    ),
+    css=MONO_CSS,
+)
+
 
 MONO_NOTE_TYPES: dict[str, NoteType] = {
-    nt.name: nt for nt in (MONO_BASIC, MONO_CLOZE, MONO_OVERLAPPING)
+    nt.name: nt for nt in (MONO_BASIC, MONO_CLOZE, MONO_OVERLAPPING, MONO_TYPE)
 }

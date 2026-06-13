@@ -20,6 +20,8 @@ def test_defaults_when_no_file(tmp_path):
         "qa": "MONO Basic",
         "cloze": "MONO Cloze",
         "list": "MONO Overlapping",
+        "typed": "MONO Type",
+        "image_occlusion": "Image Occlusion",
     }
 
 

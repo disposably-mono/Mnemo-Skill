@@ -221,3 +221,101 @@ def test_configured_target_selects_matching_mapping():
 def test_configured_external_target_requires_mapping():
     with pytest.raises(MappingError, match="Missing Model"):
         adapt(_qa(), {}, target_models={"qa": "Missing Model"})
+
+
+def test_typed_fact_targets_mono_type_and_splits_hints():
+    fact = Fact.from_dict({
+        "type": "typed",
+        "content": {
+            "prompt": "Formula for water?",
+            "answer": "H2O",
+            "hints": ["Three characters", "Starts with H"],
+            "extra": "Two hydrogen atoms and one oxygen atom.",
+        },
+        "deck": "Chem",
+        "tags": [],
+    })
+    note = adapt(fact)
+    assert note.model == "MONO Type"
+    assert note.fields["Hint 1"] == "Three characters"
+    assert note.fields["Hint 2"] == "Starts with H"
+    assert note.fields["Hint 3"] == ""
+
+
+def test_image_occlusion_builds_native_fields_and_media(tmp_path):
+    image = tmp_path / "heart.png"
+    image.write_bytes(b"image")
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": "heart.png",
+            "header": "Heart anatomy",
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.3, "height": 0.1},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    note = adapt(fact, media_root=tmp_path)
+    assert note.model == "Image Occlusion"
+    assert note.fields["Image"] == '<img src="heart.png">'
+    assert "{{c1::image-occlusion:rect" in note.fields["Occlusion"]
+    assert ":oi=1" in note.fields["Occlusion"]
+    assert note.media == [image]
+
+
+def test_image_occlusion_can_group_masks_on_one_card(tmp_path):
+    image = tmp_path / "heart.png"
+    image.write_bytes(b"image")
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": "heart.png",
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.2, "height": 0.1, "card": 1},
+                {"shape": "rect", "left": 0.5, "top": 0.2,
+                 "width": 0.2, "height": 0.1, "card": 1},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    occlusion = adapt(fact, media_root=tmp_path).fields["Occlusion"]
+    assert occlusion.count("{{c1::") == 2
+    assert "{{c2::" not in occlusion
+
+
+def test_mapped_image_occlusion_keeps_media_upload(tmp_path):
+    image = tmp_path / "heart.png"
+    image.write_bytes(b"image")
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": "heart.png",
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.3, "height": 0.1},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    mappings = {
+        "image_occlusion": {
+            "Bildverdeckung": {
+                "Bild": "{image}",
+                "Verdeckung": "{occlusion}",
+            }
+        }
+    }
+    note = adapt(
+        fact,
+        mappings,
+        target_models={"image_occlusion": "Bildverdeckung"},
+        media_root=tmp_path,
+    )
+    assert note.fields["Bild"] == '<img src="heart.png">'
+    assert note.media == [image]

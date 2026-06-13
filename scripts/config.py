@@ -18,6 +18,8 @@ _DEFAULT_TARGETS = {
     "qa": "MONO Basic",
     "cloze": "MONO Cloze",
     "list": "MONO Overlapping",
+    "typed": "MONO Type",
+    "image_occlusion": "Image Occlusion",
 }
 
 

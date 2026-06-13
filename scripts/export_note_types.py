@@ -47,6 +47,15 @@ _EXAMPLES: dict[str, dict[str, str]] = {
         ),
         "Source": "Mnemo example",
     },
+    "MONO Type": {
+        "Prompt": "Which principle keeps each card focused on one idea?",
+        "Answer": "The minimum-information principle",
+        "Hint 1": "It minimizes something.",
+        "Hint 2": "It concerns information per card.",
+        "Hint 3": "Minimum ...",
+        "Extra": "Short, focused cards are faster to review.",
+        "Source": "Mnemo example",
+    },
 }
 
 

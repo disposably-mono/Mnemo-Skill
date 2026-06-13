@@ -15,7 +15,7 @@ def test_exports_a_valid_apkg_with_one_example_per_mono_type(tmp_path):
     result = export_note_types(out)
 
     assert result.path == out
-    assert result.count == 3  # Basic, Cloze, Overlapping
+    assert result.count == 4  # Basic, Cloze, Overlapping, Type
     assert out.exists() and out.stat().st_size > 0
     with zipfile.ZipFile(out) as zf:
         assert any(n.startswith("collection.anki2") for n in zf.namelist())

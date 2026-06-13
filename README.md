@@ -26,13 +26,16 @@ minimum-information principle, smart cloze).
 
 ## Card types
 
-| Type | v1 | Note type | Use |
-|------|----|-----------|-----|
+| Type | Status | Note type | Use |
+|------|--------|-----------|-----|
 | Cloze | ✅ | `MONO Cloze` | Fill-in-the-blank, facts in context |
 | Basic | ✅ | `MONO Basic` | Q→A recall (+ graded distractors) |
 | List / enumeration | ✅ | `MONO Overlapping` | Ordered/unordered sets & sequences |
-| Image Occlusion | planned | native | Diagrams, anatomy, maps, charts |
-| Typed / Hints | planned | `MONO Type` | Exact recall, progressive hints |
+| Typed / Hints | ✅ | `MONO Type` | Exact recall with up to three native hints |
+| Image Occlusion | ✅ live | native `Image Occlusion` | Diagrams, anatomy, maps, charts |
+
+Native image occlusion requires Anki 23.10+ and a live AnkiConnect import. The
+`.apkg` fallback supports the four bundled MONO note types.
 
 ## Pipeline
 
@@ -63,6 +66,44 @@ source (pdf / md / pptx)
 
 5. Copy `config.example.toml` to `config.toml` and adjust.
 
+6. Optional: install all four MONO note types ahead of time. The live importer
+   creates missing MONO types and refreshes existing MONO templates/styles,
+   but this package is useful for previewing or sharing them:
+
+   ```bash
+   python scripts/export_note_types.py -o mnemo-note-types.apkg
+   ```
+
+   Import the resulting package with **File → Import** in Anki.
+
+## Import configuration
+
+`config.toml` controls the AnkiConnect URL, sync behavior, fallback deck/tag,
+and target model for every Fact type. `mappings.toml` defines how semantic Fact
+fields populate stock or community note types.
+
+```toml
+# config.toml
+[target_note_types]
+qa = "Basic"
+```
+
+```toml
+# mappings.toml
+[qa."Basic"]
+Front = "{front}"
+Back = "{back}<br>{source}"
+```
+
+Run an approved import with:
+
+```bash
+python scripts/import_cards.py cards/session.jsonl
+```
+
+MONO fonts are bundled in both live imports and generated `.apkg` files, so
+card styling does not depend on Google Fonts or network access during review.
+
 ## Development
 
 ```bash
@@ -72,4 +113,5 @@ pytest --cov                # with coverage (target: 80%+)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Code is MIT — see [LICENSE](LICENSE). Bundled font files retain their SIL Open
+Font License terms in `assets/fonts/LICENSE-*.txt`.

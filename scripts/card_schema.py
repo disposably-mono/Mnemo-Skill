@@ -5,9 +5,9 @@ about Anki; the Anki backends know nothing about PDFs; the only smart piece in
 between (Claude-driven generation) emits validated Facts. Keeping this contract
 small and strict is what lets the rest of the system stay decoupled.
 
-A Fact has a semantic ``type`` (``qa`` / ``cloze`` / ``list``) and a
-type-specific ``content`` payload. The note-type adapter (``scripts/adapter``)
-later renders a Fact into concrete Anki note fields.
+A Fact has a semantic ``type`` (``qa`` / ``cloze`` / ``list`` / ``typed`` /
+``image_occlusion``) and a type-specific ``content`` payload. The note-type
+adapter (``scripts/adapter``) later renders it into concrete Anki note fields.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list")
+FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list", "typed", "image_occlusion")
 GRADES: tuple[str, ...] = ("far", "medium", "near")
 
 # A cloze deletion looks like {{c1::answer}} (optionally {{c1::answer::hint}}).
@@ -65,13 +65,21 @@ class Fact:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Fact":
         """Build and validate a Fact from a plain dict (e.g. JSON line)."""
+        if not isinstance(data, dict):
+            raise CardValidationError("fact must be a JSON object")
         raw_distractors = data.get("distractors") or []
+        if not isinstance(raw_distractors, list):
+            raise CardValidationError("distractors must be a list")
         distractors = [_distractor_from_dict(d) for d in raw_distractors]
+        content = data.get("content") or {}
+        if not isinstance(content, dict):
+            raise CardValidationError("content must be an object")
+        tags = data.get("tags") or []
         fact = cls(
             type=data.get("type", ""),
-            content=dict(data.get("content") or {}),
+            content=dict(content),
             deck=data.get("deck", ""),
-            tags=list(data.get("tags") or []),
+            tags=tags,
             source=data.get("source"),
             distractors=distractors,
         )
@@ -124,8 +132,13 @@ def validate_fact(fact: Fact) -> None:
 
     _validate_tags(fact.tags)
 
-    if fact.distractors and fact.type == "list":
-        raise CardValidationError("distractors are not allowed on 'list' facts")
+    if fact.source is not None and not isinstance(fact.source, str):
+        raise CardValidationError("source must be a string when provided")
+
+    if fact.distractors and fact.type not in {"qa", "cloze"}:
+        raise CardValidationError(
+            f"distractors are not allowed on {fact.type!r} facts"
+        )
 
     _CONTENT_VALIDATORS[fact.type](fact.content)
 
@@ -159,6 +172,7 @@ def _validate_cloze(content: dict[str, Any]) -> None:
         raise CardValidationError(
             "cloze content must contain a cloze deletion like {{c1::answer}}"
         )
+    _validate_optional_str(content, "extra", "cloze")
 
 
 def _validate_list(content: dict[str, Any]) -> None:
@@ -171,12 +185,96 @@ def _validate_list(content: dict[str, Any]) -> None:
     for item in items:
         if not isinstance(item, str) or not item.strip():
             raise CardValidationError("each list item must be a non-empty string")
+    _validate_optional_str(content, "extra", "list")
+
+
+def _validate_typed(content: dict[str, Any]) -> None:
+    _require_nonempty_str(content, "prompt", "typed")
+    _require_nonempty_str(content, "answer", "typed")
+    hints = content.get("hints", [])
+    if not isinstance(hints, list):
+        raise CardValidationError("typed content 'hints' must be a list of strings")
+    if len(hints) > 3:
+        raise CardValidationError("typed content supports at most three hints")
+    for hint in hints:
+        if not isinstance(hint, str) or not hint.strip():
+            raise CardValidationError("each typed hint must be a non-empty string")
+    _validate_optional_str(content, "extra", "typed")
+
+
+def _validate_image_occlusion(content: dict[str, Any]) -> None:
+    _require_nonempty_str(content, "image", "image_occlusion")
+    masks = content.get("masks")
+    if not isinstance(masks, list) or not masks:
+        raise CardValidationError(
+            "image_occlusion content requires at least one mask"
+        )
+    for mask in masks:
+        _validate_occlusion_mask(mask)
+    for key in ("header", "back_extra", "comments"):
+        _validate_optional_str(content, key, "image_occlusion")
+    occlude_inactive = content.get("occlude_inactive", True)
+    if not isinstance(occlude_inactive, bool):
+        raise CardValidationError(
+            "image_occlusion content 'occlude_inactive' must be true or false"
+        )
+
+
+def _validate_optional_str(content: dict[str, Any], key: str, kind: str) -> None:
+    if key in content and not isinstance(content[key], str):
+        raise CardValidationError(f"{kind} content {key!r} must be a string")
+
+
+def _validate_occlusion_mask(mask: Any) -> None:
+    if not isinstance(mask, dict):
+        raise CardValidationError("each image occlusion mask must be an object")
+    shape = mask.get("shape")
+    if shape not in {"rect", "ellipse", "polygon"}:
+        raise CardValidationError(
+            "image occlusion mask shape must be 'rect', 'ellipse', or 'polygon'"
+        )
+    card = mask.get("card")
+    if card is not None and (
+        isinstance(card, bool) or not isinstance(card, int) or card < 1
+    ):
+        raise CardValidationError("image occlusion mask 'card' must be a positive integer")
+
+    if shape == "polygon":
+        for key in ("left", "top"):
+            _validate_normalized_number(mask.get(key), f"mask {key}")
+        points = mask.get("points")
+        if not isinstance(points, list) or len(points) < 3:
+            raise CardValidationError("polygon masks require at least three points")
+        for point in points:
+            if not isinstance(point, list) or len(point) != 2:
+                raise CardValidationError("polygon points must be [x, y] pairs")
+            _validate_normalized_number(point[0], "polygon x")
+            _validate_normalized_number(point[1], "polygon y")
+        return
+
+    for key in ("left", "top"):
+        _validate_normalized_number(mask.get(key), f"mask {key}")
+    size_keys = ("width", "height") if shape == "rect" else ("rx", "ry")
+    for key in size_keys:
+        value = mask.get(key)
+        _validate_normalized_number(value, f"mask {key}")
+        if value == 0:
+            raise CardValidationError(f"mask {key} must be greater than zero")
+
+
+def _validate_normalized_number(value: Any, label: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise CardValidationError(f"{label} must be a number between 0 and 1")
+    if value < 0 or value > 1:
+        raise CardValidationError(f"{label} must be between 0 and 1")
 
 
 _CONTENT_VALIDATORS = {
     "qa": _validate_qa,
     "cloze": _validate_cloze,
     "list": _validate_list,
+    "typed": _validate_typed,
+    "image_occlusion": _validate_image_occlusion,
 }
 
 

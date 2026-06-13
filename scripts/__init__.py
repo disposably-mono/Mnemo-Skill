@@ -8,6 +8,7 @@ Modules:
     note_types        - MONO reference note types (templates + design-system CSS)
     anki_connect      - live import via the AnkiConnect HTTP API
     genanki_export    - .apkg fallback when Anki desktop is not running
+    media             - bundled fonts and note-media collection
     import_cards      - orchestrator + CLI (load -> adapt -> import)
     export_note_types - write the MONO note types as an installable .apkg
 """

@@ -162,6 +162,77 @@ def test_format_summary_ankiconnect_omits_sync_when_not_synced():
     assert "sync" not in summary.lower()
 
 
+def test_mappings_applied_on_live_ankiconnect_path(tmp_path):
+    jsonl = tmp_path / "s.jsonl"
+    _write_facts(jsonl)  # one qa + one cloze
+    client = FakeClient(available=True)
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}"}}}
+
+    import_cards(jsonl, client=client, mappings=mappings)
+
+    models = {n.model for n in client.added}
+    assert "Basic" in models        # qa was redirected to the stock type
+    assert "MONO Cloze" in models   # cloze had no override -> stays MONO
+
+
+def test_apkg_fallback_ignores_mappings_and_uses_mono(tmp_path):
+    # genanki can only build note types we define (MONO), so the offline
+    # package must ignore external mappings rather than crash.
+    jsonl = tmp_path / "s.jsonl"
+    _write_facts(jsonl)
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}"}}}
+    out = tmp_path / "s.apkg"
+
+    report = import_cards(jsonl, client=FakeClient(available=False),
+                          mappings=mappings, apkg_out=out)
+
+    assert report.backend == "apkg"
+    assert out.exists()
+
+
+def test_main_reads_config_and_mappings_files(tmp_path):
+    jsonl = tmp_path / "s.jsonl"
+    _write_facts(jsonl)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[anki]\nankiconnect_url = "http://localhost:18765"\n'
+        '[target_note_types]\nqa = "Basic"\n'
+    )
+    maps = tmp_path / "mappings.toml"
+    maps.write_text('[qa."Basic"]\nFront = "{front}"\nBack = "{back}"\n')
+    out = tmp_path / "s.apkg"
+
+    # Custom URL has no Anki listening -> deterministic .apkg fallback.
+    code = main([str(jsonl), "--config", str(cfg), "--mappings", str(maps),
+                 "--apkg-out", str(out)])
+
+    assert code == 0
+    assert out.exists()
+
+
+def test_import_applies_default_deck_auto_tag_and_target_model(tmp_path):
+    jsonl = tmp_path / "s.jsonl"
+    jsonl.write_text(
+        '{"type":"qa","content":{"front":"Q","back":"A"},"tags":[]}\n'
+    )
+    client = FakeClient(available=True)
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}"}}}
+
+    import_cards(
+        jsonl,
+        client=client,
+        mappings=mappings,
+        target_models={"qa": "Basic"},
+        default_deck="Inbox",
+        auto_tag="mnemo",
+    )
+
+    note = client.added[0]
+    assert note.model == "Basic"
+    assert note.deck == "Inbox"
+    assert note.tags == ["mnemo"]
+
+
 def test_main_returns_zero_and_prints_fallback_summary(tmp_path, capsys):
     # No Anki running here, so main() (real AnkiConnect, unreachable) falls back.
     jsonl = tmp_path / "session.jsonl"

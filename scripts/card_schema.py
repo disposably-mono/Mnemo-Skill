@@ -191,8 +191,13 @@ def dump_facts(facts: list[Fact], path: str | Path) -> None:
             fh.write("\n")
 
 
-def load_facts(path: str | Path) -> list[Fact]:
-    """Read and validate Facts from a JSONL file."""
+def load_facts(
+    path: str | Path,
+    *,
+    default_deck: str | None = None,
+    auto_tag: str | None = None,
+) -> list[Fact]:
+    """Read and validate Facts, applying optional import-time defaults."""
     path = Path(path)
     facts: list[Fact] = []
     with path.open("r", encoding="utf-8") as fh:
@@ -200,5 +205,13 @@ def load_facts(path: str | Path) -> list[Fact]:
             line = line.strip()
             if not line:
                 continue
-            facts.append(Fact.from_dict(json.loads(line)))
+            data = json.loads(line)
+            if default_deck and not str(data.get("deck", "")).strip():
+                data["deck"] = default_deck
+            if auto_tag:
+                tags = list(data.get("tags") or [])
+                if auto_tag not in tags:
+                    tags.append(auto_tag)
+                data["tags"] = tags
+            facts.append(Fact.from_dict(data))
     return facts

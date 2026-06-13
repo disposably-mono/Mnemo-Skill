@@ -1,7 +1,9 @@
 """Tests for the Fact -> Anki note adapter (scripts/adapter.py)."""
 
 from scripts.card_schema import Fact
-from scripts.adapter import AnkiNote, adapt
+import pytest
+
+from scripts.adapter import AnkiNote, MappingError, adapt, load_mappings
 
 
 def _qa(**over):
@@ -89,3 +91,133 @@ def test_unknown_grade_group_absent_when_empty():
     html = adapt(fact).fields["Distractors"]
     assert 'class="medium"' not in html
     assert 'class="far"' not in html
+
+
+# --- mappings.toml interop (Phase 2) ---------------------------------------
+
+def test_no_mappings_falls_back_to_mono_default():
+    # An empty mapping (or None) must preserve the MONO behavior exactly.
+    assert adapt(_qa(), mappings={}).model == "MONO Basic"
+    assert adapt(_qa(), mappings=None).model == "MONO Basic"
+
+
+def test_mapping_targets_stock_basic_note_type():
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}"}}}
+    note = adapt(_qa(), mappings=mappings)
+    assert note.model == "Basic"
+    assert note.fields == {"Front": "Capital of Australia?", "Back": "Canberra"}
+    assert note.deck == "Geography"
+    assert note.tags == ["geo", "auto"]
+
+
+def test_mapping_distractors_placeholder_renders_confusions():
+    mappings = {"qa": {"Basic": {"Front": "{front}",
+                                 "Back": "{back}{distractors}"}}}
+    fact = _qa(distractors=[{"text": "Sydney", "grade": "near"}])
+    note = adapt(fact, mappings=mappings)
+    assert "Canberra" in note.fields["Back"]
+    assert "Sydney" in note.fields["Back"]
+    assert "confusions" in note.fields["Back"]
+
+
+def test_mapping_for_cloze_targets_stock_cloze():
+    mappings = {"cloze": {"Cloze": {"Text": "{text}", "Back Extra": "{extra}"}}}
+    fact = Fact.from_dict({
+        "type": "cloze",
+        "content": {"text": "Water is {{c1::H2O}}.", "extra": "chemistry"},
+        "deck": "Chem", "tags": [],
+    })
+    note = adapt(fact, mappings=mappings)
+    assert note.model == "Cloze"
+    assert note.fields["Text"] == "Water is {{c1::H2O}}."
+    assert note.fields["Back Extra"] == "chemistry"
+
+
+def test_mapping_list_items_placeholder_renders_overlapping_cloze():
+    mappings = {"list": {"Custom": {"Header": "{title}", "Body": "{items}"}}}
+    fact = Fact.from_dict({
+        "type": "list",
+        "content": {"title": "Planets", "items": ["Mercury", "Venus", "Earth"]},
+        "deck": "Astro", "tags": [],
+    })
+    note = adapt(fact, mappings=mappings)
+    assert note.model == "Custom"
+    assert note.fields["Header"] == "Planets"
+    assert "{{c1::Mercury}}" in note.fields["Body"]
+    assert "{{c3::Earth}}" in note.fields["Body"]
+
+
+def test_only_mapped_fact_types_are_overridden():
+    # qa is remapped; cloze has no override so it stays MONO.
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}"}}}
+    cloze = Fact.from_dict({
+        "type": "cloze",
+        "content": {"text": "Sky is {{c1::blue}}."},
+        "deck": "X", "tags": [],
+    })
+    assert adapt(cloze, mappings=mappings).model == "MONO Cloze"
+
+
+def test_load_mappings_parses_nested_toml(tmp_path):
+    toml = tmp_path / "mappings.toml"
+    toml.write_text(
+        '[qa."Basic"]\n'
+        'Front = "{front}"\n'
+        'Back = "{back}"\n'
+        '[cloze."Cloze"]\n'
+        'Text = "{text}"\n'
+    )
+    mappings = load_mappings(toml)
+    assert mappings["qa"]["Basic"] == {"Front": "{front}", "Back": "{back}"}
+    assert mappings["cloze"]["Cloze"]["Text"] == "{text}"
+
+
+def test_load_mappings_missing_file_returns_empty(tmp_path):
+    assert load_mappings(tmp_path / "absent.toml") == {}
+    assert load_mappings(None) == {}
+
+
+def test_mapping_common_placeholders_include_provenance():
+    mappings = {
+        "qa": {
+            "Custom": {
+                "Meta": "{deck}|{tags}|{source}",
+            }
+        }
+    }
+    fact = _qa(source="atlas.md")
+    note = adapt(fact, mappings)
+    assert note.fields["Meta"] == "Geography|geo auto|atlas.md"
+
+
+def test_unknown_mapping_placeholder_is_rejected():
+    mappings = {"qa": {"Custom": {"Front": "{frnot}"}}}
+    with pytest.raises(MappingError, match="frnot"):
+        adapt(_qa(), mappings)
+
+
+def test_load_mappings_rejects_unknown_fact_type(tmp_path):
+    toml = tmp_path / "mappings.toml"
+    toml.write_text('[mcq."Basic"]\nFront = "{front}"\n')
+    with pytest.raises(MappingError, match="mcq"):
+        load_mappings(toml)
+
+
+def test_configured_target_selects_matching_mapping():
+    mappings = {
+        "qa": {
+            "Basic": {"Front": "{front}", "Back": "{back}"},
+            "Community": {"Question": "{front}", "Answer": "{back}"},
+        }
+    }
+    note = adapt(_qa(), mappings, target_models={"qa": "Community"})
+    assert note.model == "Community"
+    assert note.fields == {
+        "Question": "Capital of Australia?",
+        "Answer": "Canberra",
+    }
+
+
+def test_configured_external_target_requires_mapping():
+    with pytest.raises(MappingError, match="Missing Model"):
+        adapt(_qa(), {}, target_models={"qa": "Missing Model"})

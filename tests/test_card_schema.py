@@ -182,3 +182,14 @@ def test_jsonl_dump_and_load_round_trip(tmp_path):
     dump_facts(facts, path)
     loaded = load_facts(path)
     assert [f.to_dict() for f in loaded] == [f.to_dict() for f in facts]
+
+
+def test_load_facts_applies_deck_and_tag_defaults(tmp_path):
+    path = tmp_path / "cards.jsonl"
+    path.write_text(
+        '{"type":"qa","content":{"front":"Q","back":"A"},'
+        '"tags":["existing"]}\n'
+    )
+    fact = load_facts(path, default_deck="Inbox", auto_tag="mnemo")[0]
+    assert fact.deck == "Inbox"
+    assert fact.tags == ["existing", "mnemo"]

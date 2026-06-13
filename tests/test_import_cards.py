@@ -1,0 +1,175 @@
+"""Tests for the import orchestrator (scripts/import_cards.py).
+
+The orchestrator ties the pipeline together: load Facts from JSONL -> adapt to
+notes -> push via AnkiConnect when it's reachable, else export a .apkg. We inject
+a fake AnkiConnect client so no live Anki (and no real HTTP) is needed; the
+.apkg fallback path writes a real package into tmp_path.
+"""
+
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+from scripts.anki_connect import AddResult
+from scripts.card_schema import Fact, dump_facts
+from scripts.import_cards import (
+    ImportReport,
+    _format_summary,
+    import_cards,
+    main,
+)
+
+
+class FakeClient:
+    """Records the calls the orchestrator makes against an AnkiConnect client."""
+
+    def __init__(self, available=True):
+        self._available = available
+        self.ensured_decks = []
+        self.ensured_note_types = False
+        self.added = []
+        self.synced = False
+
+    def is_available(self):
+        return self._available
+
+    def ensure_note_types(self, note_types):
+        self.ensured_note_types = True
+        return []
+
+    def ensure_deck(self, name):
+        self.ensured_decks.append(name)
+
+    def add_notes(self, notes):
+        self.added.extend(notes)
+        # Pretend the last note is a duplicate to exercise skip counting.
+        added_ids = list(range(len(notes) - 1))
+        return AddResult(added=added_ids, skipped=1 if notes else 0)
+
+    def sync(self):
+        self.synced = True
+
+
+def _write_facts(path):
+    facts = [
+        Fact.from_dict({
+            "type": "qa",
+            "content": {"front": "Capital of France?", "back": "Paris"},
+            "deck": "Geography",
+            "tags": ["geo", "auto"],
+        }),
+        Fact.from_dict({
+            "type": "cloze",
+            "content": {"text": "Water is {{c1::H2O}}."},
+            "deck": "Chemistry::Basics",
+            "tags": ["chem"],
+        }),
+    ]
+    dump_facts(facts, path)
+    return facts
+
+
+def test_import_via_ankiconnect_when_available(tmp_path):
+    jsonl = tmp_path / "session.jsonl"
+    _write_facts(jsonl)
+    client = FakeClient(available=True)
+
+    report = import_cards(jsonl, client=client)
+
+    assert isinstance(report, ImportReport)
+    assert report.backend == "ankiconnect"
+    assert client.ensured_note_types is True
+    assert set(client.ensured_decks) == {"Geography", "Chemistry::Basics"}
+    assert len(client.added) == 2
+    # One AnkiNote per fact, adapted to its MONO model.
+    assert {n.model for n in client.added} == {"MONO Basic", "MONO Cloze"}
+    assert report.added == 1 and report.skipped == 1
+    assert report.apkg_path is None
+
+
+def test_sync_triggered_only_when_requested(tmp_path):
+    jsonl = tmp_path / "s.jsonl"
+    _write_facts(jsonl)
+
+    client = FakeClient(available=True)
+    import_cards(jsonl, client=client, sync=False)
+    assert client.synced is False
+
+    client2 = FakeClient(available=True)
+    report = import_cards(jsonl, client=client2, sync=True)
+    assert client2.synced is True
+    assert report.synced is True
+
+
+def test_falls_back_to_apkg_when_anki_unavailable(tmp_path):
+    jsonl = tmp_path / "session.jsonl"
+    _write_facts(jsonl)
+    client = FakeClient(available=False)
+
+    report = import_cards(jsonl, client=client)
+
+    assert report.backend == "apkg"
+    assert client.added == []          # never tried to add over HTTP
+    assert report.apkg_path is not None
+    assert report.apkg_path.exists()
+    # Default fallback path sits next to the JSONL, same stem.
+    assert report.apkg_path == jsonl.with_suffix(".apkg")
+    with zipfile.ZipFile(report.apkg_path) as zf:
+        assert any(n.startswith("collection.anki2") for n in zf.namelist())
+
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_cli_runs_as_documented_script(tmp_path):
+    """SKILL.md runs `python scripts/import_cards.py ...` directly; that form
+    must work (repo root resolvable) without Anki running -> .apkg fallback."""
+    jsonl = tmp_path / "session.jsonl"
+    _write_facts(jsonl)
+    out = tmp_path / "session.apkg"
+
+    proc = subprocess.run(
+        [sys.executable, "scripts/import_cards.py", str(jsonl),
+         "--apkg-out", str(out)],
+        cwd=_REPO_ROOT, capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert out.exists()
+
+
+def test_explicit_apkg_out_path_is_honored(tmp_path):
+    jsonl = tmp_path / "session.jsonl"
+    _write_facts(jsonl)
+    out = tmp_path / "deck-export.apkg"
+
+    report = import_cards(jsonl, client=FakeClient(available=False), apkg_out=out)
+
+    assert report.apkg_path == out
+    assert out.exists()
+
+
+def test_format_summary_ankiconnect_mentions_counts_and_sync():
+    report = ImportReport(backend="ankiconnect", added=5, skipped=2, synced=True)
+    summary = _format_summary(report)
+    assert "5 added" in summary and "2 skipped" in summary
+    assert "sync" in summary.lower()
+
+
+def test_format_summary_ankiconnect_omits_sync_when_not_synced():
+    summary = _format_summary(ImportReport(backend="ankiconnect", added=1, synced=False))
+    assert "sync" not in summary.lower()
+
+
+def test_main_returns_zero_and_prints_fallback_summary(tmp_path, capsys):
+    # No Anki running here, so main() (real AnkiConnect, unreachable) falls back.
+    jsonl = tmp_path / "session.jsonl"
+    _write_facts(jsonl)
+    out = tmp_path / "session.apkg"
+
+    code = main([str(jsonl), "--apkg-out", str(out)])
+
+    assert code == 0
+    assert out.exists()
+    assert "import" in capsys.readouterr().out.lower()

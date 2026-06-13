@@ -1,0 +1,18 @@
+# Field mappings: how a semantic Fact is rendered into a target note type's
+# fields. The MONO defaults are built in; add a block here to target stock
+# Anki types or community note types (e.g. AnKing) you have installed.
+#
+# Placeholders available per Fact type:
+#   qa    -> {front}, {back}, {distractors}
+#   cloze -> {text}, {extra}, {distractors}
+#   list  -> {title}, {items}, {extra}
+#
+# Example: target the stock "Basic" note type for qa Facts.
+# [qa."Basic"]
+# Front = "{front}"
+# Back  = "{back}"
+#
+# Example: target stock "Cloze" for cloze Facts.
+# [cloze."Cloze"]
+# Text       = "{text}"
+# "Back Extra" = "{extra}"

@@ -1,0 +1,196 @@
+/* ============================================================
+   MONO — Design Tokens
+   Colors, Typography, Radii, Spacing, Easings
+   --------------------------------------------------------------
+   Two themes: dark (default) and light.
+   Toggle by setting [data-theme="dark"|"light"] on <html>.
+   ============================================================ */
+
+/* Fonts via Google Fonts.
+   Same families the source uses — DM Serif Display (display),
+   Outfit (body sans), DM Mono (mono). Keep weights minimal. */
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500&display=swap');
+
+:root {
+  /* ── Core Palette (theme-agnostic raw colors) ───────── */
+  --graphite:       #34312D;  /* base dark — body bg in dark mode */
+  --fern:           #588157;  /* primary accent — sage green */
+  --fern-dark:      #3B6D11;  /* deeper accent for light theme */
+  --beige:          #EAF0CE;  /* primary light — body bg in light mode */
+  --lavender:       #E5D4ED;  /* highlight pastel */
+  --lavender-grey:  #8D99AE;  /* muted grey-blue */
+  --mint:           #9FE1CB;  /* hover accent (dark) */
+  --plum:           #534AB7;  /* highlight (light) */
+
+  /* ── Type Families ──────────────────────────────────── */
+  --font-serif: 'DM Serif Display', Georgia, serif;
+  --font-sans:  'Outfit', system-ui, sans-serif;
+  --font-mono:  'DM Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── Type Scale ─────────────────────────────────────── */
+  --fs-display:  clamp(64px, 14vw, 128px);   /* hero name */
+  --fs-h1:       clamp(36px, 6vw, 60px);     /* section heads */
+  --fs-h2:       clamp(20px, 3vw, 28px);     /* card titles */
+  --fs-body:     16px;
+  --fs-body-sm:  14px;
+  --fs-label:    11px;                       /* mono uppercase eyebrow */
+  --fs-hint:     10px;
+
+  --lh-display:  1.0;
+  --lh-heading:  1.1;
+  --lh-body:     1.7;
+  --lh-loose:    1.8;
+
+  /* ── Letter spacing ─────────────────────────────────── */
+  --tracking-tight:   -0.02em;   /* display + h1 */
+  --tracking-snug:    -0.01em;
+  --tracking-normal:   0em;
+  --tracking-mono:     0.06em;   /* base mono */
+  --tracking-label:    0.14em;   /* section labels */
+  --tracking-pill:     0.08em;
+  --tracking-eyebrow:  0.18em;   /* hero eyebrow */
+
+  /* ── Radii ──────────────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   20px;
+  --radius-pill: 99px;
+
+  /* ── Layout ─────────────────────────────────────────── */
+  --max-w:       960px;
+  --section-gap: 120px;
+  --page-pad:    32px;
+
+  /* ── Borders ────────────────────────────────────────── */
+  --hair: 0.5px;             /* hairline weight — used everywhere */
+
+  /* ── Motion ─────────────────────────────────────────── */
+  --ease:               cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-strong:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer:        cubic-bezier(0.32, 0.72, 0, 1);
+
+  --dur-fast:   160ms;
+  --dur-base:   220ms;
+  --dur-slow:   450ms;
+  --dur-reveal: 800ms;
+
+  /* ── Shadows ────────────────────────────────────────── */
+  --shadow-lift: 0 12px 32px rgba(0, 0, 0, 0.18);
+  --shadow-glow: 0 0 32px rgba(88, 129, 87, 0.35);  /* fern glow */
+}
+
+/* ============================================================
+   Theme: Dark (default — graphite ground)
+   ============================================================ */
+[data-theme="dark"], :root {
+  --bg:           #34312D;   /* graphite */
+  --bg-2:         #3d3a35;   /* card surface */
+  --bg-3:         #464240;   /* elevated */
+  --text-primary: #EAF0CE;   /* beige on graphite */
+  --text-sec:     #8D99AE;   /* lavender-grey for prose */
+  --text-muted:   #5F5E5A;   /* low-contrast meta */
+  --accent:       #588157;   /* fern */
+  --accent-light: #9FE1CB;   /* mint hover */
+  --highlight:    #E5D4ED;   /* lavender pop */
+  --border:       rgba(234, 240, 206, 0.08);
+  --border-hover: rgba(234, 240, 206, 0.16);
+  --selection-bg: var(--accent);
+  --selection-fg: var(--beige);
+}
+
+/* ============================================================
+   Theme: Light (beige ground)
+   ============================================================ */
+[data-theme="light"] {
+  --bg:           #EAF0CE;
+  --bg-2:         #dfe6bb;
+  --bg-3:         #d4dcae;
+  --text-primary: #34312D;
+  --text-sec:     #5F5E5A;
+  --text-muted:   #8D99AE;
+  --accent:       #3B6D11;
+  --accent-light: #588157;
+  --highlight:    #534AB7;
+  --border:       rgba(52, 49, 45, 0.10);
+  --border-hover: rgba(52, 49, 45, 0.20);
+  --selection-bg: var(--accent);
+  --selection-fg: var(--beige);
+}
+
+/* ============================================================
+   Semantic Type Styles
+   Class-based (.t-h1, .t-body) — keep usage explicit, not implicit.
+   Mirrors source/css/style.css §3.
+   ============================================================ */
+
+.t-display {
+  font-family: var(--font-serif);
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+.t-h1 {
+  font-family: var(--font-serif);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-heading);
+  letter-spacing: var(--tracking-snug);
+  color: var(--text-primary);
+}
+
+.t-h2 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.t-body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-loose);
+  font-weight: 300;
+  color: var(--text-sec);
+}
+
+.t-body-sm {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body);
+  font-weight: 300;
+  color: var(--text-sec);
+}
+
+/* The signature MONO motif: mono-cased, tracked, uppercase,
+   accent-colored. Used for every section label + button. */
+.t-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body-sm);
+  letter-spacing: var(--tracking-mono);
+  color: var(--text-primary);
+}
+
+.t-hint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+/* Italic-serif accent — used inline for emphasis (e.g. "Who I am.") */
+.t-italic-accent {
+  font-style: italic;
+  color: var(--accent);
+}

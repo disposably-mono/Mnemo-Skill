@@ -1,0 +1,24 @@
+# Copy to config.toml and edit. config.toml is gitignored.
+
+[anki]
+# AnkiConnect add-on (code 2055492159) exposes this local HTTP API while
+# Anki desktop is running.
+ankiconnect_url = "http://localhost:8765"
+# Trigger an AnkiWeb sync after a successful import (pushes cards to phone).
+sync_after_import = true
+
+[decks]
+# Cards with no explicit deck land here. "::" denotes Anki subdecks.
+default_deck = "Inbox"
+
+[tags]
+# Every auto-generated card gets this tag so they're easy to find/bulk-edit.
+auto_tag = "auto"
+
+[target_note_types]
+# Which note type each semantic Fact type maps to by default.
+# Override these to target stock or community (e.g. AnKing) note types;
+# field-level mapping for non-MONO targets lives in mappings.toml.
+qa = "MONO Basic"
+cloze = "MONO Cloze"
+list = "MONO Overlapping"

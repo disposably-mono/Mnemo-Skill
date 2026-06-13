@@ -1,0 +1,5 @@
+# Runtime dependencies. See requirements-dev.txt for test/dev tooling.
+requests>=2.31
+genanki>=0.13
+pymupdf>=1.24
+python-pptx>=0.6.23

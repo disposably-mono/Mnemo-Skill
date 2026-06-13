@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+
+# Project runtime output
+cards/*.md
+cards/*.jsonl
+!cards/.gitkeep
+*.apkg
+
+# Local config (keep the .example, ignore the real one)
+config.toml
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code local (machine-specific permissions)
+.claude/settings.local.json

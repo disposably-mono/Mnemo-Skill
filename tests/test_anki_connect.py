@@ -91,7 +91,11 @@ def test_add_notes_counts_added_and_skipped():
         sent["notes"] = payload["params"]["notes"]
         # Second note is a duplicate -> AnkiConnect returns null for it.
         return [1001, None]
-    _register({"addNotes": add_notes})
+    _register({
+        "addNotes": add_notes,
+        "notesInfo": lambda p: [{"cards": [5001]}],
+        "changeDeck": lambda p: None,
+    })
 
     notes = [
         AnkiNote(model="MONO Basic", deck="Geo",
@@ -108,6 +112,44 @@ def test_add_notes_counts_added_and_skipped():
     assert first["modelName"] == "MONO Basic"
     assert first["fields"]["Front"] == "Q"
     assert first["options"]["allowDuplicate"] is False
+
+
+@responses.activate
+def test_add_notes_pins_new_cards_to_their_target_decks():
+    # Regression: some Anki/AnkiConnect builds ignore addNotes' deckName and dump
+    # every card into Default. add_notes must re-home each new card via changeDeck.
+    changed = []
+    def notes_info(payload):
+        # AnkiConnect returns card ids per requested note, in order.
+        return [{"cards": [7001]}, {"cards": [7002, 7003]}]
+    def change_deck(payload):
+        changed.append((tuple(payload["params"]["cards"]), payload["params"]["deck"]))
+        return None
+    _register({
+        "addNotes": lambda p: [9001, 9002],
+        "notesInfo": notes_info,
+        "changeDeck": change_deck,
+    })
+
+    notes = [
+        AnkiNote(model="MONO Basic", deck="Geography",
+                 fields={"Front": "Q", "Back": "A"}, tags=[]),
+        AnkiNote(model="MONO Cloze", deck="Chemistry::Basics",
+                 fields={"Text": "{{c1::x}}"}, tags=[]),
+    ]
+    result = AnkiConnect(URL).add_notes(notes)
+
+    assert result.added == [9001, 9002]
+    # Each note's cards land in that note's deck (grouped per deck).
+    assert ((7001,), "Geography") in changed
+    assert ((7002, 7003), "Chemistry::Basics") in changed
+
+
+@responses.activate
+def test_change_deck_noop_on_empty_card_list():
+    # No HTTP call should be made for an empty card set.
+    _register({"changeDeck": lambda p: pytest.fail("changeDeck called with no cards")})
+    AnkiConnect(URL).change_deck([], "Geography")
 
 
 @responses.activate

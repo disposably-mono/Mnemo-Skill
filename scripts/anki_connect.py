@@ -148,7 +148,14 @@ class AnkiConnect:
         return list(self._invoke("findNotes", query=query))
 
     def add_notes(self, notes: list[AnkiNote]) -> AddResult:
-        """Add notes; AnkiConnect returns a note id per note, or null if refused."""
+        """Add notes; AnkiConnect returns a note id per note, or null if refused.
+
+        After adding, each new note's cards are explicitly pinned to the note's
+        target deck with ``changeDeck``. Some Anki / AnkiConnect builds ignore the
+        per-note ``deckName`` on ``addNotes`` and route every new card to the
+        Default deck; re-homing makes placement deterministic across versions (and
+        is a harmless no-op when ``deckName`` was already honored).
+        """
         payload = [
             {
                 "deckName": n.deck,
@@ -160,9 +167,29 @@ class AnkiConnect:
             for n in notes
         ]
         result = self._invoke("addNotes", notes=payload)
-        added = [nid for nid in result if nid is not None]
+        added_notes = [
+            (note, nid) for note, nid in zip(notes, result) if nid is not None
+        ]
         skipped = sum(1 for nid in result if nid is None)
-        return AddResult(added=added, skipped=skipped)
+        self._pin_decks(added_notes)
+        return AddResult(added=[nid for _, nid in added_notes], skipped=skipped)
+
+    def change_deck(self, card_ids: Iterable[int], deck: str) -> None:
+        """Move the given cards into ``deck`` (which must already exist)."""
+        ids = list(card_ids)
+        if ids:
+            self._invoke("changeDeck", cards=ids, deck=deck)
+
+    def _pin_decks(self, added_notes: list[tuple[AnkiNote, int]]) -> None:
+        """Force each freshly-added note's cards into its note's target deck."""
+        if not added_notes:
+            return
+        infos = self._invoke("notesInfo", notes=[nid for _, nid in added_notes])
+        cards_by_deck: dict[str, list[int]] = {}
+        for (note, _nid), info in zip(added_notes, infos):
+            cards_by_deck.setdefault(note.deck, []).extend(info.get("cards", []))
+        for deck, card_ids in cards_by_deck.items():
+            self.change_deck(card_ids, deck)
 
     # --- sync ---------------------------------------------------------------
 

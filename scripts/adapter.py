@@ -182,15 +182,17 @@ def _placeholders(
 
 
 def _fill(template: str, placeholders: dict[str, str]) -> str:
-    """Replace known ``{key}`` tokens; literal braces elsewhere are left as-is."""
+    """Replace known ``{key}`` tokens; literal braces elsewhere are left as-is.
+
+    Substitution is single-pass: a substituted value is never re-scanned, so a
+    ``{key}`` literal that appears inside one field's value can't be clobbered by
+    a later field's substitution.
+    """
     unknown = set(_PLACEHOLDER.findall(template)) - set(placeholders)
     if unknown:
         joined = ", ".join(sorted(unknown))
         raise MappingError(f"unknown mapping placeholder(s): {joined}")
-    out = template
-    for key, value in placeholders.items():
-        out = out.replace("{" + key + "}", value)
-    return out
+    return _PLACEHOLDER.sub(lambda match: placeholders[match.group(1)], template)
 
 
 def _build_qa(

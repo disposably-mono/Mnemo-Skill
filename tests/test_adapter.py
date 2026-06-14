@@ -196,6 +196,16 @@ def test_unknown_mapping_placeholder_is_rejected():
         adapt(_qa(), mappings)
 
 
+def test_mapping_value_containing_a_token_is_not_re_substituted():
+    # A field value that literally contains another field's {token} must be
+    # filled in a single pass — the inner {back} stays verbatim.
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}"}}}
+    fact = _qa(content={"front": "see {back} below", "back": "Canberra"})
+    note = adapt(fact, mappings)
+    assert note.fields["Front"] == "see {back} below"
+    assert note.fields["Back"] == "Canberra"
+
+
 def test_load_mappings_rejects_unknown_fact_type(tmp_path):
     toml = tmp_path / "mappings.toml"
     toml.write_text('[mcq."Basic"]\nFront = "{front}"\n')

@@ -190,6 +190,27 @@ def test_mapping_common_placeholders_include_provenance():
     assert note.fields["Meta"] == "Geography|geo auto|atlas.md"
 
 
+def test_mapping_common_placeholders_include_semantic_metadata():
+    mappings = {
+        "qa": {
+            "Custom": {
+                "Meta": "{knowledge_unit_id}|{knowledge_kind}|{objective_ids}|{origin}|{confidence}",
+            }
+        }
+    }
+    fact = _qa(
+        knowledge_unit_id="unit-1",
+        knowledge_kind="comparison",
+        objective_ids=["objective-1"],
+        origin="source",
+        confidence=0.9,
+    )
+
+    assert adapt(fact, mappings).fields["Meta"] == (
+        "unit-1|comparison|objective-1|source|0.9"
+    )
+
+
 def test_unknown_mapping_placeholder_is_rejected():
     mappings = {"qa": {"Custom": {"Front": "{frnot}"}}}
     with pytest.raises(MappingError, match="frnot"):

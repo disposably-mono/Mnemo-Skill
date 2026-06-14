@@ -75,6 +75,29 @@ def test_pptx_yields_one_chunk_per_slide_with_all_shape_text(tmp_path):
     assert chunks[0].source == "deck.pptx slide 1"
 
 
+def test_pptx_includes_tables_and_existing_speaker_notes(tmp_path):
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    pptx = tmp_path / "structured.pptx"
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    table = slide.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(5), Inches(2)).table
+    table.cell(0, 0).text = "Metric"
+    table.cell(0, 1).text = "Meaning"
+    table.cell(1, 0).text = "ROI"
+    table.cell(1, 1).text = "Return on investment"
+    slide.notes_slide.notes_text_frame.text = "Explain why cost belongs in the denominator."
+    prs.save(str(pptx))
+
+    chunks = ingest(pptx)
+
+    assert "Metric | Meaning" in chunks[0].text
+    assert "ROI | Return on investment" in chunks[0].text
+    assert "Speaker notes:" in chunks[0].text
+    assert "cost belongs in the denominator" in chunks[0].text
+
+
 def test_unknown_extension_raises(tmp_path):
     weird = tmp_path / "image.png"
     weird.write_bytes(b"\x89PNG")

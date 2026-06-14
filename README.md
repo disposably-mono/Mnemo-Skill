@@ -10,6 +10,11 @@ free AnkiWeb sync). This tool kills the real bottleneck: **authoring good cards
 fast**, with Claude applying spaced-repetition pedagogy (atomic cards, the
 minimum-information principle, smart cloze).
 
+Mnemo plans knowledge before it renders cards. A domain-neutral semantic layer
+tracks learning objectives, prerequisites, source support, confidence, and
+structures such as comparisons, processes, arguments, narratives, formulas,
+examples, exceptions, and applications.
+
 ## Why this design
 
 - **Recall-first, no fragile in-card JavaScript.** Cards are cloze / basic /
@@ -42,12 +47,18 @@ Native image occlusion requires Anki 23.10+ and a live AnkiConnect import. The
 ```
 source (pdf / md / pptx)
   -> ingest        normalized text + provenance
+  -> plan          objectives + KnowledgeUnit manifest
   -> generate      Fact[] incl. graded distractors  (Claude, guided by SKILL.md)
+  -> cover         represented / deferred / unsupported / omitted objectives
   -> review gate   you edit/approve cards/<session>.md
   -> adapt         Fact -> {model, fields}  (mappings.toml)
   -> import        AnkiConnect (live)  or  genanki .apkg (fallback)
   -> sync          AnkiWeb -> phone (AnkiDroid / AnkiMobile)
 ```
+
+The audited CSV generator writes `.manifest.json` and `.coverage.json` beside
+the existing settings, violations, and retention sidecars. Text-only decks are
+valid; images and card formats are selected only when they fit the material.
 
 ## Setup
 

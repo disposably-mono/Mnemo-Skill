@@ -70,11 +70,34 @@ def _ingest_pptx(path: Path) -> list[Chunk]:
     chunks: list[Chunk] = []
     prs = Presentation(str(path))
     for index, slide in enumerate(prs.slides, start=1):
-        parts = [
-            shape.text_frame.text
-            for shape in slide.shapes
-            if shape.has_text_frame and shape.text_frame.text.strip()
-        ]
+        parts: list[str] = []
+        for shape in slide.shapes:
+            if shape.has_text_frame and shape.text_frame.text.strip():
+                parts.append(shape.text_frame.text)
+            elif shape.has_table:
+                rows = [
+                    " | ".join(cell.text.strip() for cell in row.cells)
+                    for row in shape.table.rows
+                ]
+                table = "\n".join(row for row in rows if row.strip(" |"))
+                if table:
+                    parts.append(table)
+            elif shape.has_chart:
+                chart = shape.chart
+                chart_parts: list[str] = []
+                if chart.has_title and chart.chart_title.text_frame.text.strip():
+                    chart_parts.append(chart.chart_title.text_frame.text.strip())
+                chart_parts.extend(
+                    str(series.name).strip()
+                    for series in chart.series
+                    if str(series.name).strip()
+                )
+                if chart_parts:
+                    parts.append("Chart: " + " | ".join(chart_parts))
+        if slide.has_notes_slide:
+            notes = slide.notes_slide.notes_text_frame.text.strip()
+            if notes:
+                parts.append(f"Speaker notes:\n{notes}")
         text = "\n".join(parts).strip()
         if text:  # skip empty slides
             chunks.append(Chunk(text=text, source=f"{path.name} slide {index}"))

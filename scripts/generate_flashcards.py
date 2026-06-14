@@ -20,6 +20,22 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.knowledge import (
+    KNOWLEDGE_KINDS,
+    LEARNING_PURPOSES,
+    ORIGINS,
+    KnowledgeUnit,
+    LearningObjective,
+    build_coverage_report,
+    classify_knowledge,
+    extract_explicit_objectives,
+    infer_topic_objectives,
+    stable_id,
+)
+
 
 CSV_FIELDS = (
     "Front",
@@ -33,8 +49,15 @@ CSV_FIELDS = (
     "Topic",
     "Source",
     "CardID",
+    "KnowledgeUnitID",
+    "KnowledgeKind",
+    "LearningPurpose",
+    "ObjectiveIDs",
+    "PrerequisiteIDs",
+    "Origin",
+    "Confidence",
 )
-CARD_TYPES = ("qa", "cloze", "reverse", "image-supported")
+CARD_TYPES = ("qa", "cloze", "reverse", "typed", "list", "image-supported")
 MAX_FRONT_WORDS = 19  # Rubric says fewer than 20 words.
 MAX_COMPONENTS = 4
 DEFAULT_SEED = 42
@@ -50,6 +73,12 @@ _ANSWER_LINE = re.compile(r"^(?:A(?:nswer)?):\s*(.+)$", re.IGNORECASE)
 _EXTRA_LINE = re.compile(r"^Extra:\s*(.+)$", re.IGNORECASE)
 _TOPIC_LINE = re.compile(r"^Topic:\s*(.+)$", re.IGNORECASE)
 _TAGS_LINE = re.compile(r"^Tags?:\s*(.+)$", re.IGNORECASE)
+_OBJECTIVE_LINE = re.compile(
+    r"^(?:(?:learning\s+)?objectives?\s*:|"
+    r"(?:students?|learners?|you) (?:should be able to|will be able to|can)\s+)",
+    re.IGNORECASE,
+)
+_OBJECTIVE_HEADER = re.compile(r"^(?:learning\s+)?objectives?\s*:\s*$", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*(?:[-*+] |\d+[.)]\s+)(.+)$")
 _CLOZE = re.compile(r"\{\{c\d+::(.*?)(?:::[^}]*)?\}\}")
 _WORDS = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
@@ -67,15 +96,13 @@ _DEFINITION = re.compile(
     r"^(?P<subject>.+?)\s+(?:is|means|refers to)\s+(?P<object>.+?)[.!?]?$",
     re.IGNORECASE,
 )
+_WHAT_IS = re.compile(r"^What is\s+(?P<term>.+?)\??$", re.IGNORECASE)
+_DEFINE = re.compile(r"^Define\s+(?P<term>.+?)\.?$", re.IGNORECASE)
+_WHAT_MEANS = re.compile(r"^What does\s+(?P<term>.+?)\s+mean\??$", re.IGNORECASE)
 _RELATION = re.compile(
     r"^(?P<subject>.+?)\s+(?P<verb>is|are|was|were|has|have|includes?|contains?|"
     r"causes?|means?|requires?|uses?|produces?|prevents?|allows?)\s+"
     r"(?P<object>.+?)[.!?]?$",
-    re.IGNORECASE,
-)
-_COMPLETION_PROMPT = re.compile(
-    r"^Complete:\s*(?P<subject>.+?)\s+(?P<verb>is|are|was|were|has|have|includes?|"
-    r"contains?|causes?|means?|requires?|uses?|produces?|prevents?|allows?)\s+___\.$",
     re.IGNORECASE,
 )
 _LIST_STATEMENT = re.compile(
@@ -116,6 +143,13 @@ class SourceUnit:
     image_url: str = ""
     image_alt: str = ""
     group_components: list[str] = field(default_factory=list)
+    knowledge_unit_id: str = ""
+    knowledge_kind: str = "fact"
+    learning_purpose: str = "recall"
+    objective_ids: list[str] = field(default_factory=list)
+    prerequisite_ids: list[str] = field(default_factory=list)
+    origin: str = "source"
+    confidence: float = 1.0
 
 
 @dataclass
@@ -131,6 +165,13 @@ class Card:
     image_url: str = ""
     image_alt: str = ""
     card_id: str = ""
+    knowledge_unit_id: str = ""
+    knowledge_kind: str = "fact"
+    learning_purpose: str = "recall"
+    objective_ids: list[str] = field(default_factory=list)
+    prerequisite_ids: list[str] = field(default_factory=list)
+    origin: str = "source"
+    confidence: float = 1.0
 
     def to_row(self) -> dict[str, str]:
         return {
@@ -145,6 +186,13 @@ class Card:
             "Topic": self.topic,
             "Source": self.source,
             "CardID": self.card_id,
+            "KnowledgeUnitID": self.knowledge_unit_id,
+            "KnowledgeKind": self.knowledge_kind,
+            "LearningPurpose": self.learning_purpose,
+            "ObjectiveIDs": " ".join(self.objective_ids),
+            "PrerequisiteIDs": " ".join(self.prerequisite_ids),
+            "Origin": self.origin,
+            "Confidence": f"{self.confidence:.4f}",
         }
 
 
@@ -178,17 +226,21 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
     pending_image: tuple[str, str] | None = None
     units: list[SourceUnit] = []
     paragraph: list[str] = []
+    paragraph_start_line = 0
+    objective_block = False
     index = 0
 
     def source_at(line_number: int) -> str:
         return f"{source_name}:line-{line_number}"
 
     def flush_paragraph(line_number: int) -> None:
-        nonlocal paragraph, pending_image
+        nonlocal paragraph, paragraph_start_line, pending_image
         raw = " ".join(part.strip() for part in paragraph if part.strip()).strip()
         paragraph = []
         if not raw:
             return
+        source_line = paragraph_start_line or line_number
+        paragraph_start_line = 0
         for statement in split_sentences(raw):
             image_url, image_alt = pending_image or ("", "")
             units.extend(
@@ -196,7 +248,7 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
                     SourceUnit(
                         text=statement,
                         topic=topic,
-                        source=source_at(line_number),
+                        source=source_at(source_line),
                         image_url=image_url,
                         image_alt=image_alt,
                     )
@@ -210,6 +262,7 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
         line_number = index + 1
         if not line:
             flush_paragraph(line_number)
+            objective_block = False
             index += 1
             continue
 
@@ -217,6 +270,7 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
         if heading:
             flush_paragraph(line_number)
             topic = heading.group(1).strip()
+            objective_block = False
             index += 1
             continue
 
@@ -226,6 +280,18 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
             topic = topic_match.group(1).strip()
             index += 1
             continue
+
+        if _OBJECTIVE_HEADER.match(line):
+            flush_paragraph(line_number)
+            objective_block = True
+            index += 1
+            continue
+
+        if _OBJECTIVE_LINE.match(line) or (objective_block and _BULLET.match(raw)):
+            flush_paragraph(line_number)
+            index += 1
+            continue
+        objective_block = False
 
         image = _IMAGE_DIRECTIVE.match(line)
         if image:
@@ -320,11 +386,112 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
             index += 1
             continue
 
+        if paragraph and starts_new_structured_line(paragraph[-1], line):
+            flush_paragraph(line_number)
+        if not paragraph:
+            paragraph_start_line = line_number
         paragraph.append(line)
         index += 1
 
     flush_paragraph(len(lines) or 1)
     return [unit for unit in units if unit.text.strip() or unit.answer.strip()]
+
+
+def starts_new_structured_line(previous: str, current: str) -> bool:
+    """Separate note-like lines without breaking ordinary wrapped prose."""
+    if re.search(r"(?:[A-Za-z][A-Za-z0-9_]*|\d+)\s*=\s*[^=]+$", previous):
+        return True
+    if previous.rstrip().endswith((".", "!", "?")) and re.match(r"^[A-Z0-9]", current):
+        return True
+    return bool(
+        re.match(
+            r"^(?:First|Second|Third|Finally|Before|After|Because|However|Unlike|"
+            r"For example|An exception)\b",
+            current,
+            re.IGNORECASE,
+        )
+    )
+
+
+def plan_knowledge(
+    units: Sequence[SourceUnit], source_text: str, source_name: str
+) -> tuple[list[LearningObjective], list[KnowledgeUnit]]:
+    """Classify parsed units and connect them to explicit or inferred objectives."""
+    explicit = extract_explicit_objectives(source_text, source_name)
+    explicit_topics = {objective.topic for objective in explicit}
+    inferred = infer_topic_objectives(
+        (unit.topic for unit in units if unit.topic not in explicit_topics), source_name
+    )
+    objectives = [*explicit, *inferred]
+    by_topic: dict[str, list[LearningObjective]] = defaultdict(list)
+    for objective in objectives:
+        by_topic[objective.topic].append(objective)
+
+    knowledge_units: list[KnowledgeUnit] = []
+    definitions_by_topic: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for unit in units:
+        kind, purpose = classify_knowledge(unit.text, unit.question)
+        unit_id = stable_id("unit", unit.text, unit.question, unit.answer, unit.source)
+        objective_ids = assign_objectives(
+            unit, by_topic.get(unit.topic) or by_topic.get("General", [])
+        )
+        prerequisites = [
+            definition_id
+            for term, definition_id in definitions_by_topic[unit.topic]
+            if re.search(rf"\b{re.escape(term)}\b", unit.text, re.IGNORECASE)
+        ]
+        unit.knowledge_unit_id = unit_id
+        unit.knowledge_kind = kind
+        unit.learning_purpose = purpose
+        unit.objective_ids = list(objective_ids)
+        unit.prerequisite_ids = prerequisites
+        knowledge = KnowledgeUnit(
+            id=unit_id,
+            text=unit.text,
+            kind=kind,
+            purpose=purpose,
+            topic=unit.topic,
+            source=unit.source,
+            objective_ids=list(objective_ids),
+            prerequisite_ids=prerequisites,
+            origin=unit.origin,
+            confidence=unit.confidence,
+        )
+        knowledge_units.append(knowledge)
+        if kind == "definition":
+            match = _DEFINITION.match(unit.text)
+            term = definition_term(unit.question) if unit.question else ""
+            term = term or (match.group("subject").strip() if match else "")
+            if term:
+                definitions_by_topic[unit.topic].append((term, unit_id))
+    return objectives, knowledge_units
+
+
+def assign_objectives(
+    unit: SourceUnit, objectives: Sequence[LearningObjective]
+) -> list[str]:
+    if len(objectives) <= 1:
+        return [objective.id for objective in objectives]
+    unit_tokens = semantic_tokens(f"{unit.question} {unit.answer} {unit.text}")
+    scored = [
+        (len(unit_tokens & semantic_tokens(objective.label)), objective)
+        for objective in objectives
+    ]
+    best = max((score for score, _ in scored), default=0)
+    return [objective.id for score, objective in scored if score == best and score > 0]
+
+
+def semantic_tokens(value: str) -> set[str]:
+    stopwords = {
+        "and", "the", "this", "that", "with", "from", "into", "what", "when",
+        "where", "which", "able", "students", "learners", "explain", "identify",
+        "understand", "describe", "apply",
+    }
+    return {
+        token.casefold()
+        for token in _WORDS.findall(value)
+        if len(token) > 2 and token.casefold() not in stopwords
+    }
 
 
 def parse_delimited_pair(line: str) -> tuple[str, str] | None:
@@ -366,11 +533,19 @@ def atomic_units(unit: SourceUnit) -> list[SourceUnit]:
 
     answer_items = split_list_items(unit.answer) if unit.answer else []
     if len(answer_items) >= 2:
+        label = re.sub(
+            r"^(?:What are the components of|Which items make up)\s+",
+            "",
+            unit.question,
+            flags=re.IGNORECASE,
+        ).rstrip(" ?")
+        label = re.sub(r"^What are (?:the )?", "", label, flags=re.IGNORECASE)
+        label = re.sub(r"\s+named in the handout$", "", label, flags=re.IGNORECASE)
         return [
             clone_unit(
                 unit,
                 text=f"{unit.question} {item}",
-                question=f"What is answer component {position} of {len(answer_items)} for: {unit.question}",
+                question=f"What is component {position} of {len(answer_items)} in {label}?",
                 answer=item,
                 group_components=answer_items,
             )
@@ -392,18 +567,27 @@ def clone_unit(unit: SourceUnit, **changes: object) -> SourceUnit:
 def split_list_items(text: str) -> list[str]:
     if not text or not re.search(r"[,;]", text):
         return []
-    normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", text, flags=re.IGNORECASE)
-    items = [part.strip(" .") for part in re.split(r"[;,]", normalized) if part.strip(" .")]
+    if ";" in text:
+        items = [part.strip(" .") for part in text.split(";") if part.strip(" .")]
+    else:
+        normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", text, flags=re.IGNORECASE)
+        items = [part.strip(" .") for part in normalized.split(",") if part.strip(" .")]
     if len(items) < 2 or any(word_count(item) > 12 for item in items):
         return []
     return items
 
 
 def split_independent_clauses(text: str) -> list[str]:
+    if re.search(
+        r"\b(?:but|whereas|while|however|therefore|because|evidence|claim|exception)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return [text.strip()]
     semicolon_parts = [part.strip(" .") for part in text.split(";") if part.strip(" .")]
     if len(semicolon_parts) > 1 and all(_VERB.search(part) for part in semicolon_parts):
         return [part + "." for part in semicolon_parts]
-    parts = re.split(r"\s+(?:and|but|whereas|while)\s+", text, flags=re.IGNORECASE)
+    parts = re.split(r"\s+and\s+", text, flags=re.IGNORECASE)
     if len(parts) == 2 and all(word_count(part) >= 3 and _VERB.search(part) for part in parts):
         return [part.strip(" .") + "." for part in parts]
     return [text.strip()]
@@ -415,6 +599,8 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
     for index, unit in enumerate(units):
         card_type = choose_card_type(unit, index, type_counts)
         front, back = render_prompt(unit, card_type)
+        if not front.strip() or not back.strip():
+            continue
         mnemonic = make_mnemonic(unit.group_components)
         image_url = unit.image_url
         image_alt = normalize_image_alt(unit.image_alt) if image_url else ""
@@ -436,38 +622,75 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             image_url=image_url,
             image_alt=image_alt,
             card_id=card_id,
+            knowledge_unit_id=unit.knowledge_unit_id,
+            knowledge_kind=unit.knowledge_kind,
+            learning_purpose=unit.learning_purpose,
+            objective_ids=list(unit.objective_ids),
+            prerequisite_ids=list(unit.prerequisite_ids),
+            origin=unit.origin,
+            confidence=unit.confidence,
         )
         cards.append(card)
         type_counts[card_type] += 1
 
-    diversify_card_types(cards)
     return cards
 
 
 def choose_card_type(unit: SourceUnit, index: int, counts: Counter[str]) -> str:
     if unit.image_url:
         return "image-supported"
+    if unit.knowledge_kind == "formula" or exact_answer_candidate(unit.answer):
+        return "typed"
     if unit.question:
         if reversible_definition(unit) and counts["reverse"] <= counts["qa"] // 2:
             return "reverse"
         return "qa"
-    return "cloze" if index % 2 == 0 else "qa"
+    if unit.knowledge_kind in {"definition", "comparison", "mechanism", "argument", "narrative", "exception"}:
+        return "qa"
+    return "cloze" if meaningful_cloze_candidate(unit.text) else "qa"
+
+
+def exact_answer_candidate(answer: str) -> bool:
+    if not answer:
+        return False
+    value = answer.strip().rstrip(".")
+    return bool(
+        re.fullmatch(r"[A-Za-z]\w*\s*=\s*.+", value)
+        or (word_count(value) <= 3 and re.search(r"\d", value))
+        or re.fullmatch(r"[A-Z]{2,}", value)
+    )
+
+
+def meaningful_cloze_candidate(text: str) -> bool:
+    relation = _RELATION.match(text)
+    if not relation:
+        return False
+    answer = relation.group("object").strip(" .")
+    return 1 <= word_count(answer) <= 8
 
 
 def reversible_definition(unit: SourceUnit) -> bool:
     if unit.question and unit.answer:
-        return word_count(unit.answer) <= 8 and word_count(unit.question) <= 16
+        return word_count(unit.answer) <= 12 and bool(definition_term(unit.question))
     return bool(_DEFINITION.match(unit.text))
 
 
 def render_prompt(unit: SourceUnit, card_type: str) -> tuple[str, str]:
     if card_type == "reverse" and unit.question and unit.answer:
-        return f"What does {unit.answer} identify?", unit.question.rstrip("?")
+        term = definition_term(unit.question)
+        if term:
+            return f"Which term means: {unit.answer.rstrip('.')}?", term
     if card_type == "cloze":
         cloze = make_cloze(unit.text)
         return cloze, answer_from_cloze(cloze)
     if unit.question and unit.answer:
         return unit.question, unit.answer
+    formula = re.match(r"^(?P<label>[^=]{1,60}?)\s*=\s*(?P<formula>.+?)\.?$", unit.text)
+    if formula:
+        return f"What is the formula for {formula.group('label').strip()}?", formula.group("formula").strip()
+    semantic = render_semantic_prompt(unit)
+    if semantic:
+        return semantic
     definition = _DEFINITION.match(unit.text)
     if definition:
         return f"What is {definition.group('subject').strip()}?", definition.group("object").strip(" .")
@@ -477,7 +700,57 @@ def render_prompt(unit: SourceUnit, card_type: str) -> tuple[str, str]:
         verb = relation.group("verb").lower()
         object_ = relation.group("object").strip(" .")
         return f"Complete: {subject} {verb} ___.", object_
-    return concise_recall_prompt(unit), unit.text.strip()
+    structured = structured_recall_prompt(unit)
+    return (structured, unit.text.strip()) if structured else ("", "")
+
+
+def render_semantic_prompt(unit: SourceUnit) -> tuple[str, str] | None:
+    text = unit.text.strip(" .")
+    if unit.knowledge_kind == "comparison":
+        match = re.match(
+            r"^(?P<left>.+?) differs? from (?P<right>.+?) (?:because|by) (?P<criterion>.+)$",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            return (
+                f"How does {match.group('left')} differ from {match.group('right')}?",
+                match.group("criterion"),
+            )
+    if unit.knowledge_kind == "mechanism":
+        match = re.match(r"^Because (?P<cause>.+?), (?P<result>.+)$", text, re.IGNORECASE)
+        if match:
+            return (
+                f"What causes this outcome: {match.group('result').rstrip('.')}?",
+                match.group("cause"),
+            )
+    if unit.knowledge_kind == "narrative":
+        match = re.match(r"^After (?P<event>.+?), (?P<result>.+)$", text, re.IGNORECASE)
+        if match:
+            return f"What happens after {match.group('event')}?", match.group("result")
+    if unit.knowledge_kind == "exception":
+        match = re.match(r"^(?P<rule>.+?) only when (?P<condition>.+)$", text, re.IGNORECASE)
+        if match:
+            return (
+                f"Under what condition is this rule true: {match.group('rule')}?",
+                match.group("condition"),
+            )
+    return None
+
+
+def structured_recall_prompt(unit: SourceUnit) -> str:
+    topic = unit.topic if word_count(unit.topic) <= 6 else "this topic"
+    prompts = {
+        "comparison": f"What distinction does the source make in {topic}?",
+        "ordered-process": f"What sequence does the source give for {topic}?",
+        "procedure": f"Which procedure step is described in {topic}?",
+        "mechanism": f"What mechanism does the source explain in {topic}?",
+        "argument": f"What claim or evidence is presented in {topic}?",
+        "narrative": f"Which event or causal link occurs in {topic}?",
+        "example": f"Which example illustrates a concept in {topic}?",
+        "exception": f"Which exception or qualification applies in {topic}?",
+    }
+    return prompts.get(unit.knowledge_kind, "")
 
 
 def make_cloze(statement: str) -> str:
@@ -511,6 +784,17 @@ def answer_from_cloze(cloze: str) -> str:
 def concise_recall_prompt(unit: SourceUnit) -> str:
     topic = unit.topic if word_count(unit.topic) <= 6 else "this topic"
     return f"What fact should you recall about {topic}?"
+
+
+def definition_term(question: str) -> str:
+    for pattern in (_WHAT_IS, _DEFINE, _WHAT_MEANS):
+        match = pattern.match(question.strip())
+        if match:
+            term = match.group("term").strip(" .?")
+            if re.match(r"^(?:answer\s+)?component\b", term, re.IGNORECASE):
+                return ""
+            return term
+    return ""
 
 
 def build_extra(unit: SourceUnit) -> str:
@@ -564,32 +848,33 @@ def diversify_card_types(cards: list[Card]) -> None:
     for desired in ("qa", "cloze", "reverse"):
         if desired in present:
             continue
-        candidate = next(
-            (
-                card
-                for card in cards
-                if card.card_type != "image-supported" and counts[card.card_type] > 1
-            ),
-            None,
+        candidates = (
+            card
+            for card in cards
+            if card.card_type != "image-supported" and counts[card.card_type] > 1
         )
+        if desired == "reverse":
+            candidate = next((card for card in candidates if definition_term(card.front)), None)
+        elif desired == "cloze":
+            candidate = next((card for card in candidates if word_count(card.back) >= 3), None)
+        else:
+            candidate = next(candidates, None)
         if candidate is None:
             return
         previous_type = candidate.card_type
         if desired == "cloze":
             statement = strip_html_and_cloze(candidate.back)
             candidate.front = make_cloze(statement)
+            if not _CLOZE.search(candidate.front):
+                prompt = strip_html_and_cloze(candidate.front).rstrip(" ?")
+                candidate.front = f"{prompt}: {{{{c1::{statement}}}}}"
             candidate.back = answer_from_cloze(candidate.front)
         elif desired == "reverse":
-            completion = _COMPLETION_PROMPT.match(strip_html_and_cloze(candidate.front))
-            if completion:
-                object_ = strip_html_and_cloze(candidate.back)
-                candidate.front = f"What {completion.group('verb').lower()} {object_}?"
-                candidate.back = completion.group("subject").strip()
-            else:
-                candidate.front, candidate.back = (
-                    f"Which prompt is answered by {strip_html_and_cloze(candidate.back)}?",
-                    strip_html_and_cloze(candidate.front),
-                )
+            term = definition_term(strip_html_and_cloze(candidate.front))
+            candidate.front, candidate.back = (
+                f"Which term means: {strip_html_and_cloze(candidate.back).rstrip('.')}?",
+                term,
+            )
         else:
             candidate.front = f"What is the answer to: {strip_html_and_cloze(candidate.front)}?"
         candidate.card_type = desired
@@ -633,6 +918,20 @@ def validate_card(card: Card) -> list[Violation]:
     violations: list[Violation] = []
     if not card.front.strip() or not card.back.strip():
         violations.append(error("MISSING_CONTENT", "Front and Back are required.", card, "Add a single unambiguous prompt and answer."))
+    if not card.source.strip():
+        violations.append(error("MISSING_SOURCE", "Assessed content requires source provenance.", card, "Add a page, slide, section, or line source."))
+    if card.origin == "generated-enrichment" and "Enrichment:" not in card.extra:
+        violations.append(error("UNLABELED_ENRICHMENT", "Generated enrichment is not visibly labeled.", card, "Prefix generated examples or practice with 'Enrichment:'."))
+    if card.origin == "inferred" and "Inference:" not in card.extra:
+        violations.append(warning("UNLABELED_INFERENCE", "Inferred content should be distinguished from direct source claims.", card, "Add an 'Inference:' label or mark the unit as source-supported."))
+    if not 0 <= card.confidence <= 1:
+        violations.append(error("INVALID_CONFIDENCE", "Confidence must be between 0 and 1.", card, "Set semantic confidence in the inclusive 0..1 range."))
+    if card.knowledge_kind not in KNOWLEDGE_KINDS:
+        violations.append(error("INVALID_KNOWLEDGE_KIND", f"Unknown knowledge kind {card.knowledge_kind!r}.", card, "Use a supported domain-neutral knowledge kind."))
+    if card.learning_purpose not in LEARNING_PURPOSES:
+        violations.append(error("INVALID_LEARNING_PURPOSE", f"Unknown learning purpose {card.learning_purpose!r}.", card, "Use a supported learning purpose."))
+    if card.origin not in ORIGINS:
+        violations.append(error("INVALID_ORIGIN", f"Unknown origin {card.origin!r}.", card, "Use source, inferred, or generated-enrichment."))
     if word_count(card.front) > MAX_FRONT_WORDS:
         violations.append(error("FRONT_TOO_LONG", f"Front has {word_count(card.front)} words; maximum is {MAX_FRONT_WORDS}.", card, "Shorten or split the prompt."))
     if not card.extra.startswith("Explanation:"):
@@ -645,6 +944,8 @@ def validate_card(card: Card) -> list[Violation]:
         violations.append(error("CLOZE_FORMAT", "Cloze card does not contain Anki cloze syntax.", card, "Add one {{c1::answer}} deletion or change CardType."))
     if card.card_type != "cloze" and _CLOZE.search(card.front):
         violations.append(error("TYPE_FORMAT_MISMATCH", f"{card.card_type} card contains cloze syntax.", card, "Render a direct prompt or set CardType to cloze."))
+    if card.card_type == "reverse" and not card.front.startswith("Which term means:"):
+        violations.append(error("REVERSE_FORMAT", "Reverse card is not a term-from-definition prompt.", card, "Render 'Which term means: <definition>?' or change CardType."))
     component_count = estimate_components(card.back)
     if component_count > MAX_COMPONENTS:
         violations.append(error("COGNITIVE_LOAD", f"Back appears to contain {component_count} components.", card, "Split into atomic cards with at most four components."))
@@ -682,11 +983,8 @@ def image_alt_is_explanatory(alt: str) -> bool:
 
 def validate_deck(cards: Sequence[Card], config: GenerationConfig) -> list[Violation]:
     violations = [violation for card in cards for violation in validate_card(card)]
-    card_types = {card.card_type for card in cards}
-    if len(card_types) < 3:
-        violations.append(Violation("error", "FORMAT_VARIETY", f"Deck has {len(card_types)} card type(s); at least 3 are required.", action="Add atomic facts suitable for Q&A, cloze, and reverse/image-supported cards."))
-    if not any(card.image_url for card in cards):
-        violations.append(Violation("error", "TEXT_ONLY_DECK", "Deck has no relevant image-supported card.", action="Add a source image with alt text explaining its recall value."))
+    if not cards:
+        violations.append(Violation("error", "EMPTY_DECK", "No independently gradable cards could be generated.", action="Add explicit facts, questions, relations, or structured source material."))
     if config.new_cards_per_day > 20:
         violations.append(Violation("error", "DAILY_LIMIT", f"New cards/day is {config.new_cards_per_day}; maximum is 20.", action="Set --new-cards-per-day to 20 or fewer."))
     if config.graduating_interval_days != 3:
@@ -821,7 +1119,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         scheduler=args.scheduler,
         seed=args.seed,
     )
-    units = parse_content(args.input.read_text(encoding="utf-8"), args.input.name)
+    source_text = args.input.read_text(encoding="utf-8")
+    units = parse_content(source_text, args.input.name)
+    objectives, knowledge_units = plan_knowledge(units, source_text, args.input.name)
     cards = build_cards(units)
     if config.interleave_topics:
         cards = interleave_cards(cards, config.seed)
@@ -831,6 +1131,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings_path = args.output.with_suffix(".settings.json")
     violations_path = args.output.with_suffix(".violations.json")
     retention_path = args.output.with_suffix(".retention.json")
+    manifest_path = args.output.with_suffix(".manifest.json")
+    coverage_path = args.output.with_suffix(".coverage.json")
+    represented = {card.knowledge_unit_id for card in cards if card.knowledge_unit_id}
+    for unit in knowledge_units:
+        if unit.id not in represented:
+            unit.status = "deferred"
     settings = {
         **asdict(config),
         "learning_steps": list(config.learning_steps),
@@ -840,11 +1146,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_json(settings, settings_path)
     write_json([asdict(violation) for violation in violations], violations_path)
     write_json(analyze_retention(args.retention_log) if args.retention_log else {"status": "not-provided", "mature_reviews": 0, "rows": []}, retention_path)
+    write_json(
+        {
+            "version": 1,
+            "source": args.input.name,
+            "objectives": [objective.to_dict() for objective in objectives],
+            "knowledge_units": [unit.to_dict() for unit in knowledge_units],
+        },
+        manifest_path,
+    )
+    coverage_report = build_coverage_report(objectives, knowledge_units)
+    write_json(coverage_report, coverage_path)
 
     errors = sum(violation.level == "error" for violation in violations)
     warnings = sum(violation.level == "warning" for violation in violations)
-    print(f"Generated {len(cards)} cards: {args.output}")
+    deferred = sum(unit.status == "deferred" for unit in knowledge_units)
+    coverage_summary = coverage_report["summary"]
+    print(f"Generated {len(cards)} cards; deferred {deferred} unit(s): {args.output}")
+    print(
+        "Objectives: "
+        f"{coverage_summary['covered_objectives']}/{coverage_summary['objectives']} covered"
+    )
     print(f"Rubric: {errors} error(s), {warnings} warning(s): {violations_path}")
+    print(f"Manifest: {manifest_path}")
+    print(f"Coverage: {coverage_path}")
     print(f"Settings: {settings_path}")
     return 0 if args.allow_violations or errors == 0 else 2
 

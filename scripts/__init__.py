@@ -2,6 +2,7 @@
 
 Modules:
     card_schema       - the Fact contract + validation (central data model)
+    knowledge         - objectives, KnowledgeUnits, and coverage reporting
     config            - optional config.toml loader (url, sync, decks, tags)
     ingest            - source material (pdf/pptx/md) -> normalized text
     adapter           - Fact -> target note-type fields + mappings.toml interop

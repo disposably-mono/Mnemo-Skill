@@ -59,6 +59,13 @@ def load_cards(path: Path) -> tuple[list[Card], list[Violation]]:
                         topic=(row.get("Topic") or "General").strip(),
                         source=(row.get("Source") or f"{path.name}:line-{line_number}").strip(),
                         card_id=(row.get("CardID") or f"line-{line_number}").strip(),
+                        knowledge_unit_id=(row.get("KnowledgeUnitID") or "").strip(),
+                        knowledge_kind=(row.get("KnowledgeKind") or "fact").strip(),
+                        learning_purpose=(row.get("LearningPurpose") or "recall").strip(),
+                        objective_ids=(row.get("ObjectiveIDs") or "").split(),
+                        prerequisite_ids=(row.get("PrerequisiteIDs") or "").split(),
+                        origin=(row.get("Origin") or "source").strip(),
+                        confidence=float(row.get("Confidence") or 1.0),
                     )
                 )
             except (AttributeError, TypeError) as exc:
@@ -124,16 +131,53 @@ def duplicate_violations(cards: Sequence[Card]) -> list[Violation]:
     ]
 
 
+def load_coverage(path: Path | None) -> tuple[dict[str, object], list[Violation]]:
+    if path is None or not path.exists():
+        return {"status": "not-provided"}, [
+            Violation(
+                "warning",
+                "COVERAGE_MISSING",
+                "No objective coverage sidecar was found.",
+                action="Regenerate the deck to produce a .coverage.json report.",
+            )
+        ]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        objectives = data["objectives"]
+        if not isinstance(objectives, list):
+            raise TypeError("objectives must be a list")
+        allowed = {"covered", "deferred", "unsupported", "omitted"}
+        invalid = [item for item in objectives if item.get("status") not in allowed]
+        if invalid:
+            raise ValueError("every objective requires a recognized coverage status")
+        return data, []
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return {"status": "invalid"}, [
+            Violation(
+                "error",
+                "COVERAGE_INVALID",
+                f"Coverage sidecar is invalid: {exc}.",
+                action="Regenerate or repair the objective coverage report.",
+            )
+        ]
+
+
 def build_report(
     csv_path: Path,
     settings_path: Path | None = None,
     retention_log: Path | None = None,
+    coverage_path: Path | None = None,
 ) -> dict[str, object]:
     cards, parse_violations = load_cards(csv_path)
     config, config_violations = load_config(settings_path)
+    if coverage_path is None:
+        candidate = csv_path.with_suffix(".coverage.json")
+        coverage_path = candidate if candidate.exists() else None
+    coverage, coverage_violations = load_coverage(coverage_path)
     violations = [
         *parse_violations,
         *config_violations,
+        *coverage_violations,
         *validate_deck(cards, config),
         *duplicate_violations(cards),
     ]
@@ -157,9 +201,13 @@ def build_report(
         "checks": {
             "atomicity": not any(v.code in {"ATOMICITY_REVIEW", "COGNITIVE_LOAD"} for v in violations),
             "reading_time": long_fronts == 0,
-            "format_variety": len(type_counts) >= 3,
+            "format_appropriateness": not any(
+                v.code in {"CLOZE_FORMAT", "TYPE_FORMAT_MISMATCH", "REVERSE_FORMAT"}
+                for v in violations
+            ),
             "pre_understanding": all(card.extra.startswith("Explanation:") for card in cards),
-            "multimodal": any(card.image_url for card in cards),
+            "source_grounding": all(bool(card.source) for card in cards),
+            "enrichment_labeling": not any(v.code == "UNLABELED_ENRICHMENT" for v in violations),
             "daily_limit": config.new_cards_per_day <= 20,
             "ease_cap": config.max_ease_percent <= 250,
             "interleaving": not any(v.code == "INTERLEAVING" for v in violations),
@@ -167,6 +215,7 @@ def build_report(
         "violations": [asdict(violation) for violation in violations],
         "iteration_actions": actions,
         "retention": analyze_retention(retention_log) if retention_log else {"status": "not-provided", "mature_reviews": 0, "rows": []},
+        "coverage": coverage,
     }
 
 
@@ -201,6 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("deck", type=Path, help="Generated Mnemo CSV deck.")
     parser.add_argument("--settings", type=Path, help="Generator .settings.json sidecar.")
     parser.add_argument("--retention-log", type=Path, help="Review log CSV with predicted/actual retention.")
+    parser.add_argument("--coverage", type=Path, help="Objective coverage .coverage.json sidecar.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
 
@@ -214,7 +264,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if settings is None:
         candidate = args.deck.with_suffix(".settings.json")
         settings = candidate if candidate.exists() else None
-    report = build_report(args.deck, settings, args.retention_log)
+    coverage = args.coverage
+    if coverage is None:
+        candidate = args.deck.with_suffix(".coverage.json")
+        coverage = candidate if candidate.exists() else None
+    report = build_report(args.deck, settings, args.retention_log, coverage)
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:

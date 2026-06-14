@@ -18,3 +18,16 @@ hints, and live native Image Occlusion imports with rectangle, ellipse, and
 polygon masks. Native image occlusion intentionally requires Anki 23.10+ and
 AnkiConnect because genanki cannot preserve Anki's stock image-occlusion model
 metadata in a portable fallback package.
+
+## Phase 4: domain-neutral semantic planning
+
+Complete: learning objectives, domain-neutral `KnowledgeUnit` classification,
+optional semantic Fact metadata, manifest and objective-coverage sidecars,
+applicability-based card formats, explicit source grounding, labeled enrichment,
+and deferral of ungradable fragments.
+
+## Phase 5: source-format depth and evaluation
+
+Planned: reliable OCR, complex tables, equations, charts, speaker notes, and
+source-visual extraction. Calibrate heuristics against approval edits, rejection
+reasons, and mature review outcomes from representative real-world decks.

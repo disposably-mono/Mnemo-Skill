@@ -23,8 +23,7 @@ htmlcov/
 /skill/
 
 # Project runtime output
-cards/*.md
-cards/*.jsonl
+cards/*
 !cards/.gitkeep
 *.apkg
 

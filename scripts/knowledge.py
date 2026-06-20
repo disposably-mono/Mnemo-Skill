@@ -40,6 +40,10 @@ LEARNING_PURPOSES = (
     "apply",
 )
 ORIGINS = ("source", "inferred", "generated-enrichment")
+# Per-KnowledgeUnit coverage states. NOTE: objective-level status in
+# build_coverage_report uses a parallel but distinct vocabulary
+# ("covered"/"deferred"/"unsupported"/"omitted") where "covered" replaces a
+# unit's "represented" — keep the two sets in sync if either changes.
 COVERAGE_STATUSES = ("represented", "deferred", "unsupported", "omitted")
 
 _OBJECTIVE = re.compile(
@@ -200,6 +204,8 @@ def extract_explicit_objectives(text: str, source_name: str) -> list[LearningObj
 def infer_topic_objectives(
     topics: Iterable[str], source_name: str
 ) -> list[LearningObjective]:
+    # IDs key on (topic, source_name); distinct sources keep distinct ids, and
+    # duplicate topics within one source are collapsed by dict.fromkeys below.
     return [
         LearningObjective(
             id=stable_id("objective", topic, source_name),

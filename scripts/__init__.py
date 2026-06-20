@@ -5,6 +5,9 @@ Modules:
     knowledge         - objectives, KnowledgeUnits, and coverage reporting
     config            - optional config.toml loader (url, sync, decks, tags)
     ingest            - source material (pdf/pptx/md) -> normalized text
+    generate_flashcards - notes -> rubric-audited CSV deck + sidecars (baseline)
+    audit_cards       - independent card-quality rubric audit + CLI
+    calibrate         - approval/retention calibration reporting
     adapter           - Fact -> target note-type fields + mappings.toml interop
     note_types        - MONO reference note types (templates + design-system CSS)
     anki_connect      - live import via the AnkiConnect HTTP API

@@ -20,6 +20,7 @@ htmlcov/
 # Tooling
 .ruff_cache/
 .mypy_cache/
+/skill/
 
 # Project runtime output
 cards/*.md

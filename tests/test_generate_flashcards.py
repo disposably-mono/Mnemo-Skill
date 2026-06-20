@@ -2,6 +2,7 @@ import csv
 import json
 
 from scripts.generate_flashcards import (
+    Card,
     GenerationConfig,
     analyze_retention,
     atomic_units,
@@ -10,9 +11,26 @@ from scripts.generate_flashcards import (
     main,
     parse_content,
     plan_knowledge,
+    split_sentences,
+    validate_card,
     validate_deck,
 )
-from scripts.test_card_quality import build_report
+from scripts.audit_cards import build_report
+
+
+def make_card(**changes):
+    base = dict(
+        front="What is alpha?",
+        back="the first letter",
+        extra="Explanation: Alpha denotes the first ordinal position. Context: Topic: T.",
+        mnemonic="",
+        card_type="qa",
+        tags=["t"],
+        topic="T",
+        source="s:line-1",
+    )
+    base.update(changes)
+    return Card(**base)
 
 
 PASSING_NOTES = """\
@@ -293,3 +311,95 @@ def test_independent_auditor_rejects_invalid_objective_status(tmp_path):
 
     assert report["status"] == "FAIL"
     assert any(v["code"] == "COVERAGE_INVALID" for v in report["violations"])
+
+
+def test_unsplit_set_back_gets_auto_mnemonic_and_passes_mnemonic_rule():
+    cards = build_cards(
+        parse_content("The three domains of life are Bacteria, Archaea, and Eukarya.")
+    )
+    card = next(card for card in cards if "Bacteria" in card.back)
+
+    assert card.mnemonic == "BAE: Bacteria, Archaea, Eukarya"
+    violations = validate_deck(cards, GenerationConfig())
+    assert not any(violation.code == "MISSING_MNEMONIC" for violation in violations)
+
+
+def test_clausal_compound_back_does_not_demand_a_mnemonic():
+    cards = build_cards(
+        parse_content("Photosynthesis stores energy, whereas respiration releases it.")
+    )
+
+    violations = validate_deck(cards, GenerationConfig())
+    assert not any(violation.code == "MISSING_MNEMONIC" for violation in violations)
+
+
+def test_declarative_fact_with_uncommon_verb_is_not_dropped():
+    cards = build_cards(parse_content("Photosynthesis converts light into chemical energy."))
+
+    assert cards
+    assert any("Photosynthesis" in card.front for card in cards)
+
+
+def test_sentence_split_keeps_abbreviations_and_initials_together():
+    assert split_sentences("Use a base, e.g. NaOH, in the reaction. Water is wet.") == [
+        "Use a base, e.g. NaOH, in the reaction.",
+        "Water is wet.",
+    ]
+
+
+def test_thin_explanation_is_flagged_but_does_not_block():
+    card = make_card(front="What is X?", back="Y", extra="Explanation: X is Y. Context: Topic: T.")
+
+    violations = validate_card(card)
+    codes = {violation.code for violation in violations}
+    assert "THIN_EXPLANATION" in codes
+    assert all(violation.level == "warning" for violation in violations if violation.code == "THIN_EXPLANATION")
+
+
+def test_substantive_explanation_is_not_flagged_as_thin():
+    card = make_card(
+        front="What is osmosis?",
+        back="diffusion of water",
+        extra="Explanation: Solvent moves across a semipermeable membrane toward higher solute. Context: Topic: Bio.",
+    )
+
+    assert "THIN_EXPLANATION" not in {violation.code for violation in validate_card(card)}
+
+
+def test_generic_fallback_prompt_is_flagged():
+    card = make_card(
+        front="What claim or evidence is presented in Ethics?",
+        back="a specific claim",
+        extra="Explanation: The source presents a moral claim about autonomy. Context: Topic: Ethics.",
+    )
+
+    assert "GENERIC_PROMPT" in {violation.code for violation in validate_card(card)}
+
+
+def test_prose_that_only_renders_generically_is_deferred_not_faked(tmp_path):
+    source = tmp_path / "ethics.md"
+    output = tmp_path / "ethics.csv"
+    source.write_text("# Ethics\nThe author argues for moral restraint.\n", encoding="utf-8")
+
+    assert main([str(source), "--output", str(output), "--allow-violations"]) == 0
+
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows == []  # no generic card was fabricated
+
+    manifest = json.loads(output.with_suffix(".manifest.json").read_text())
+    assert manifest["knowledge_units"]
+    assert all(unit["status"] == "deferred" for unit in manifest["knowledge_units"])
+
+
+def test_image_html_attributes_are_escaped():
+    cards = build_cards(
+        parse_content(
+            '[image: a.png?x=1&y=2 | alt: The diagram cues spatial recall of the "labeled" parts.]\n'
+            "Mitochondria produce energy."
+        )
+    )
+    card = next(card for card in cards if card.image_url)
+
+    assert "a.png?x=1&amp;y=2" in card.back
+    assert "&quot;labeled&quot;" in card.back

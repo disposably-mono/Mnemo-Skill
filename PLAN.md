@@ -6,6 +6,11 @@ Mnemo is a domain-neutral, source-grounded Anki authoring system. Its specialty
 remains concise, independently gradable retrieval practice. Generality comes from
 recognizing knowledge structures rather than accumulating subject profiles.
 
+Division of labor: deterministic scripts ingest, classify, ground, and validate;
+the agent authors the cards. The scripts author only what they can ground
+specifically and defer the rest — they do not turn unparsed prose into generic
+prompts. The deterministic drafter doubles as the offline / no-agent fast path.
+
 ## Architecture
 
 1. Ingest source material with page, slide, section, and line provenance.
@@ -29,6 +34,8 @@ recognizing knowledge structures rather than accumulating subject profiles.
   context.
 - Card formats and images are used only when appropriate; no quota manufactures
   artificial variety.
+- The deterministic path defers what it cannot ground specifically; it never
+  renders a generic "what does the source say" prompt to fill coverage.
 - Existing CSV and JSONL inputs remain valid.
 
 ## Delivery
@@ -41,10 +48,14 @@ recognizing knowledge structures rather than accumulating subject profiles.
 - [x] Enforce source grounding and enrichment labeling.
 - [x] Add benchmarks for factual, comparative, procedural, argumentative,
   narrative, quantitative, exceptional, and mixed material.
-- [ ] Expand ingestion of scanned text, complex tables, equations, charts,
-  speaker notes, and source visuals as reliable parsers become available.
-- [ ] Calibrate generation using approval edits, rejection reasons, and mature
-  review outcomes from real decks.
+- [x] Expand ingestion of scanned text, complex tables, equation candidates,
+  structured PPTX chart data, speaker notes, and source visuals with provenance.
+- **DEFERRED:** Semantic interpretation of arbitrary PDF charts; PyMuPDF does
+  not reliably map vector/image geometry to categories, series, and values.
+- [x] Add calibration reporting for approval edits, rejection reasons, and
+  mature review outcomes, including Brier scores and prediction buckets.
+- **DEFERRED:** Tune generation from representative real-deck outcomes; no
+  representative approval and mature-review corpus is available in this repo.
 
 ## Acceptance Criteria
 

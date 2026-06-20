@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import html
 import json
 import random
 import re
@@ -18,7 +19,7 @@ import sys
 from collections import Counter, defaultdict, deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -87,11 +88,18 @@ _MULTI_SIGNAL = re.compile(
     r"(?:;|\b(?:first|second|third|finally)\b|\b(?:and|but|whereas|while)\b)",
     re.IGNORECASE,
 )
-_VERB = re.compile(
-    r"\b(?:is|are|was|were|has|have|includes?|contains?|consists?|causes?|"
-    r"means?|refers?|requires?|uses?|produces?|prevents?|allows?)\b",
-    re.IGNORECASE,
+# Shared relational-verb vocabulary. A narrow list silently drops ordinary
+# declarative facts (e.g. "converts", "forms", "encodes") because render_prompt
+# can find no relation to test. Keep this single source of truth so _VERB and
+# _RELATION never diverge.
+_REL_VERB_ALT = (
+    r"is|are|was|were|has|have|includes?|contains?|consists?|comprises?|causes?|"
+    r"means?|refers?|requires?|uses?|produces?|prevents?|allows?|converts?|forms?|"
+    r"binds?|regulates?|encodes?|represents?|transmits?|occurs?|releases?|"
+    r"generates?|stores?|transfers?|transports?|controls?|determines?|describes?|"
+    r"defines?|equals?|measures?|involves?|enables?|reduces?|increases?|decreases?"
 )
+_VERB = re.compile(rf"\b(?:{_REL_VERB_ALT})\b", re.IGNORECASE)
 _DEFINITION = re.compile(
     r"^(?P<subject>.+?)\s+(?:is|means|refers to)\s+(?P<object>.+?)[.!?]?$",
     re.IGNORECASE,
@@ -100,9 +108,7 @@ _WHAT_IS = re.compile(r"^What is\s+(?P<term>.+?)\??$", re.IGNORECASE)
 _DEFINE = re.compile(r"^Define\s+(?P<term>.+?)\.?$", re.IGNORECASE)
 _WHAT_MEANS = re.compile(r"^What does\s+(?P<term>.+?)\s+mean\??$", re.IGNORECASE)
 _RELATION = re.compile(
-    r"^(?P<subject>.+?)\s+(?P<verb>is|are|was|were|has|have|includes?|contains?|"
-    r"causes?|means?|requires?|uses?|produces?|prevents?|allows?)\s+"
-    r"(?P<object>.+?)[.!?]?$",
+    rf"^(?P<subject>.+?)\s+(?P<verb>{_REL_VERB_ALT})\s+(?P<object>.+?)[.!?]?$",
     re.IGNORECASE,
 )
 _LIST_STATEMENT = re.compile(
@@ -507,8 +513,37 @@ def parse_tags(value: str) -> list[str]:
     return [slugify(tag) for tag in re.split(r"[,\s]+", value) if tag.strip()]
 
 
+# Tokens that end with a period but do not end a sentence. Without this guard,
+# "e.g.", "U.S.", "Fig. 3", and single-letter initials fragment ordinary prose.
+_ABBREVIATIONS = frozenset(
+    {
+        "e.g", "i.e", "etc", "vs", "al", "cf", "approx", "no", "fig", "eq",
+        "dr", "mr", "mrs", "ms", "prof", "st", "mt", "u.s", "u.k", "ph.d",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct",
+        "nov", "dec",
+    }
+)
+
+
 def split_sentences(text: str) -> list[str]:
-    return [part.strip() for part in _FACT_BOUNDARY.split(text) if part.strip()]
+    """Split prose on sentence boundaries, skipping abbreviation periods."""
+    parts: list[str] = []
+    start = 0
+    for boundary in _FACT_BOUNDARY.finditer(text):
+        preceding = text[:boundary.start()].rstrip()
+        token = re.search(r"(\S+)[.!?]+$", preceding)
+        last = token.group(1).lower() if token else ""
+        # Skip splitting after known abbreviations or single-letter initials.
+        if last in _ABBREVIATIONS or re.fullmatch(r"[a-z]", last):
+            continue
+        segment = text[start:boundary.start()].strip()
+        if segment:
+            parts.append(segment)
+        start = boundary.end()
+    tail = text[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
 
 
 def atomic_units(unit: SourceUnit) -> list[SourceUnit]:
@@ -577,6 +612,23 @@ def split_list_items(text: str) -> list[str]:
     return items
 
 
+def enumerated_components(text: str) -> list[str]:
+    """Return the set members when a back is a short enumeration, else ``[]``.
+
+    Both the generator (to attach a mnemonic) and the validator (to demand one)
+    call this, so they never disagree about what counts as a >=3-component set.
+    Clausal compounds joined by ``whereas``/``but``/... are not enumerations; a
+    member that contains a verb is a clause, not a set element.
+    """
+    clean = strip_html_and_cloze(text).strip(" .")
+    if re.search(r"\b(?:whereas|while|because|however|therefore|but)\b", clean, re.I):
+        return []
+    items = split_list_items(clean)
+    if any(_VERB.search(item) for item in items):
+        return []
+    return items
+
+
 def split_independent_clauses(text: str) -> list[str]:
     if re.search(
         r"\b(?:but|whereas|while|however|therefore|because|evidence|claim|exception)\b",
@@ -601,13 +653,16 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
         front, back = render_prompt(unit, card_type)
         if not front.strip() or not back.strip():
             continue
-        mnemonic = make_mnemonic(unit.group_components)
+        mnemonic = make_mnemonic(unit.group_components or enumerated_components(back))
         image_url = unit.image_url
         image_alt = normalize_image_alt(unit.image_alt) if image_url else ""
         if image_url:
             card_type = "image-supported"
-            back = f'{back}<br><img src="{image_url}" alt="{image_alt}">'
-        extra = build_extra(unit)
+            back = (
+                f'{back}<br><img src="{html.escape(image_url, quote=True)}" '
+                f'alt="{html.escape(image_alt, quote=True)}">'
+            )
+        extra = build_extra(unit, front, back)
         tags = [*unit.tags, slugify(unit.topic), "auto"]
         card_id = stable_card_id(front, back, unit.source)
         card = Card(
@@ -700,8 +755,12 @@ def render_prompt(unit: SourceUnit, card_type: str) -> tuple[str, str]:
         verb = relation.group("verb").lower()
         object_ = relation.group("object").strip(" .")
         return f"Complete: {subject} {verb} ___.", object_
-    structured = structured_recall_prompt(unit)
-    return (structured, unit.text.strip()) if structured else ("", "")
+    # Defer, don't fake. If no specific prompt can be rendered, emit nothing so
+    # the unit surfaces as deferred (see main) for an authoring pass, rather than
+    # shipping a generic "what does the source say about X" card the rubric would
+    # only flag. The deterministic path authors what it can verify; prose it
+    # cannot parse is handed to the LLM/human author.
+    return ("", "")
 
 
 def render_semantic_prompt(unit: SourceUnit) -> tuple[str, str] | None:
@@ -738,19 +797,28 @@ def render_semantic_prompt(unit: SourceUnit) -> tuple[str, str] | None:
     return None
 
 
-def structured_recall_prompt(unit: SourceUnit) -> str:
-    topic = unit.topic if word_count(unit.topic) <= 6 else "this topic"
-    prompts = {
-        "comparison": f"What distinction does the source make in {topic}?",
-        "ordered-process": f"What sequence does the source give for {topic}?",
-        "procedure": f"Which procedure step is described in {topic}?",
-        "mechanism": f"What mechanism does the source explain in {topic}?",
-        "argument": f"What claim or evidence is presented in {topic}?",
-        "narrative": f"Which event or causal link occurs in {topic}?",
-        "example": f"Which example illustrates a concept in {topic}?",
-        "exception": f"Which exception or qualification applies in {topic}?",
-    }
-    return prompts.get(unit.knowledge_kind, "")
+# Stems of low-specificity prompts that recall "what the source says" rather
+# than a concrete fact. The deterministic generator no longer emits these (it
+# defers such units instead), but the auditor keeps the guard so an authored CSV
+# that reintroduces them is caught.
+_GENERIC_PROMPT_STEMS = (
+    "What distinction does the source make",
+    "What sequence does the source give",
+    "Which procedure step is described",
+    "What mechanism does the source explain",
+    "What claim or evidence is presented",
+    "Which event or causal link occurs",
+    "Which example illustrates a concept",
+    "Which exception or qualification applies",
+    "What does the source state about",
+    "What fact should you recall about",
+)
+_GENERIC_PROMPT = re.compile("|".join(re.escape(stem) for stem in _GENERIC_PROMPT_STEMS))
+
+
+def is_generic_prompt(front: str) -> bool:
+    """True for vague prompts that test no specific fact (audit guard)."""
+    return bool(_GENERIC_PROMPT.match(strip_html_and_cloze(front).strip()))
 
 
 def make_cloze(statement: str) -> str:
@@ -781,11 +849,6 @@ def answer_from_cloze(cloze: str) -> str:
     return "; ".join(answers) if answers else cloze
 
 
-def concise_recall_prompt(unit: SourceUnit) -> str:
-    topic = unit.topic if word_count(unit.topic) <= 6 else "this topic"
-    return f"What fact should you recall about {topic}?"
-
-
 def definition_term(question: str) -> str:
     for pattern in (_WHAT_IS, _DEFINE, _WHAT_MEANS):
         match = pattern.match(question.strip())
@@ -797,14 +860,50 @@ def definition_term(question: str) -> str:
     return ""
 
 
-def build_extra(unit: SourceUnit) -> str:
-    explanation = unit.extra.strip() or unit.text.strip()
+def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> str:
+    """Compose the Extra field from any explicit elaboration plus context.
+
+    Prefers an author-supplied ``Extra:``. Without one, it falls back to the
+    declarative statement rather than echoing the question, so a Q&A unit does
+    not produce ``Explanation: <question> <answer>``. Whether the explanation is
+    substantive is judged separately by ``explanation_is_thin`` at validation.
+    The context trigger uses the rendered ``front``/``back`` so it matches the
+    fields the validator inspects.
+    """
+    explanation = unit.extra.strip() or declarative_statement(unit)
     parts = [f"Explanation: {explanation}"]
-    if requires_context(unit.text, unit.question):
+    if requires_context(front or unit.text, back or unit.question):
         parts.append(f"Context: {unit.topic} background is assumed; review {unit.source} if unfamiliar.")
     else:
         parts.append(f"Context: Topic: {unit.topic}.")
     return " ".join(parts)
+
+
+def declarative_statement(unit: SourceUnit) -> str:
+    """A statement form of a unit that does not restate the question verbatim."""
+    if unit.question and unit.answer:
+        answer = unit.answer.strip()
+        return answer if answer.endswith((".", "!", "?")) else f"{answer}."
+    return unit.text.strip()
+
+
+def explanation_is_thin(card: Card) -> bool:
+    """True when the explanation adds no information beyond Front and Back.
+
+    A restated prompt gives false confidence: the ``pre_understanding`` audit
+    check only verifies the ``Explanation:`` prefix exists. This flags cards
+    whose explanation is a near-duplicate of the prompt so a human (or an LLM
+    pass) enriches them before study.
+    """
+    body = card.extra
+    if body.startswith("Explanation:"):
+        body = body[len("Explanation:"):]
+    body = body.split("Context:", 1)[0]
+    explanation_tokens = semantic_tokens(body)
+    if not explanation_tokens:
+        return True
+    prompt_tokens = semantic_tokens(f"{card.front} {card.back}")
+    return explanation_tokens <= prompt_tokens
 
 
 def requires_context(*values: str) -> bool:
@@ -837,51 +936,6 @@ def normalize_image_alt(alt: str) -> str:
 def stable_card_id(front: str, back: str, source: str) -> str:
     digest = hashlib.sha256(f"{front}\0{back}\0{source}".encode()).hexdigest()
     return digest[:16]
-
-
-def diversify_card_types(cards: list[Card]) -> None:
-    """Use three formats when the deck has enough distinct atomic facts."""
-    if len(cards) < 3:
-        return
-    counts = Counter(card.card_type for card in cards)
-    present = set(counts)
-    for desired in ("qa", "cloze", "reverse"):
-        if desired in present:
-            continue
-        candidates = (
-            card
-            for card in cards
-            if card.card_type != "image-supported" and counts[card.card_type] > 1
-        )
-        if desired == "reverse":
-            candidate = next((card for card in candidates if definition_term(card.front)), None)
-        elif desired == "cloze":
-            candidate = next((card for card in candidates if word_count(card.back) >= 3), None)
-        else:
-            candidate = next(candidates, None)
-        if candidate is None:
-            return
-        previous_type = candidate.card_type
-        if desired == "cloze":
-            statement = strip_html_and_cloze(candidate.back)
-            candidate.front = make_cloze(statement)
-            if not _CLOZE.search(candidate.front):
-                prompt = strip_html_and_cloze(candidate.front).rstrip(" ?")
-                candidate.front = f"{prompt}: {{{{c1::{statement}}}}}"
-            candidate.back = answer_from_cloze(candidate.front)
-        elif desired == "reverse":
-            term = definition_term(strip_html_and_cloze(candidate.front))
-            candidate.front, candidate.back = (
-                f"Which term means: {strip_html_and_cloze(candidate.back).rstrip('.')}?",
-                term,
-            )
-        else:
-            candidate.front = f"What is the answer to: {strip_html_and_cloze(candidate.front)}?"
-        candidate.card_type = desired
-        candidate.card_id = stable_card_id(candidate.front, candidate.back, candidate.source)
-        counts[previous_type] -= 1
-        counts[desired] += 1
-        present.add(desired)
 
 
 def interleave_cards(cards: Sequence[Card], seed: int = DEFAULT_SEED) -> list[Card]:
@@ -951,8 +1005,12 @@ def validate_card(card: Card) -> list[Violation]:
         violations.append(error("COGNITIVE_LOAD", f"Back appears to contain {component_count} components.", card, "Split into atomic cards with at most four components."))
     if looks_compound(card.back):
         violations.append(warning("ATOMICITY_REVIEW", "Back may contain more than one independently testable fact.", card, "Split independent clauses or confirm they form one fact."))
-    if component_count >= 3 and not card.mnemonic.strip():
-        violations.append(error("MISSING_MNEMONIC", "A concept with at least three components lacks a mnemonic.", card, "Add an acronym or visual association."))
+    if len(enumerated_components(card.back)) >= 3 and not card.mnemonic.strip():
+        violations.append(error("MISSING_MNEMONIC", "A set of at least three components lacks a mnemonic.", card, "Add an acronym or visual association."))
+    if is_generic_prompt(card.front):
+        violations.append(warning("GENERIC_PROMPT", "Prompt recalls 'what the source says' rather than a specific fact.", card, "Rewrite as a concrete question testing one fact, or defer the unit."))
+    if explanation_is_thin(card):
+        violations.append(warning("THIN_EXPLANATION", "Explanation restates the prompt without adding understanding.", card, "Add why the fact holds, or a distinguishing detail, before study."))
     if card.image_url:
         if card.card_type != "image-supported":
             violations.append(error("IMAGE_TYPE", "Image card is not marked image-supported.", card, "Set CardType to image-supported."))
@@ -1163,6 +1221,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     deferred = sum(unit.status == "deferred" for unit in knowledge_units)
     coverage_summary = coverage_report["summary"]
     print(f"Generated {len(cards)} cards; deferred {deferred} unit(s): {args.output}")
+    if deferred:
+        print(
+            f"Author the {deferred} deferred unit(s) listed in {manifest_path} "
+            "(status=deferred); the deterministic path only renders units it can "
+            "ground specifically."
+        )
     print(
         "Objectives: "
         f"{coverage_summary['covered_objectives']}/{coverage_summary['objectives']} covered"

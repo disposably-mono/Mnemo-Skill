@@ -20,44 +20,84 @@ examples, exceptions, procedures, or enrichment.
 
 ## Workflow
 
+Mnemo divides labor by what each layer does best. Deterministic scripts ingest,
+classify, ground, and **validate**; the agent (you) **authors** the cards. The
+scripts never invent a prompt they cannot ground — prose they cannot parse is
+left deferred for you to author. Do not treat the generated CSV as a finished
+deck.
+
 1. Identify the source, deck, topics, and expected prerequisite knowledge.
-2. Ingest Markdown or text directly. For PDF/PPTX, run
+
+2. **Ingest (deterministic).** Read Markdown or text directly. For PDF/PPTX, run
    `python scripts/ingest.py <source>` and preserve page/slide provenance.
-3. Extract explicit learning objectives. Infer one major-concept objective per
-   topic only when objectives are absent.
-4. Build knowledge units and classify their structure before authoring cards.
-5. Ensure the source supports every assessed claim. Defer ambiguous or unsupported
-   units. Label generated examples and practice as `Enrichment:`.
-6. Add a source image only when it teaches visual or spatial knowledge. Use
+   Image-only (likely scanned) PDF pages are surfaced as a visible marker
+   instead of being dropped; add `--ocr` to recover their text through Tesseract
+   when available, which is tagged `(OCR)` in provenance as lower confidence.
+   Detected PDF tables are re-emitted as structured `header | value` rows
+   (labeled `Table:`) so row/column relationships survive flat text extraction.
+   Math-like PDF text-layer lines are repeated as `[math: ... | source]`
+   candidates, preserving extracted Greek/operator spans without claiming full
+   equation parsing. PPTX charts are re-emitted as category/series/value tables;
+   do not infer trends or conclusions that are not stated in the source.
+   Add `--extract-images DIR` to save qualifying source visuals with provenance.
+
+3. **Plan and draft (deterministic).** Run
+
+   ```bash
+   python scripts/generate_flashcards.py notes.md --output cards/session.csv
+   ```
+
+   This extracts objectives, builds and classifies knowledge units, writes the
+   `.manifest.json` and `.coverage.json` sidecars, and authors cards only for
+   units it can ground specifically: explicit Q&A, definitions, clean
+   enumerations, formulas, and simple relations. Prose it cannot parse confidently
+   is left as `status: deferred` in the manifest rather than rendered as a vague
+   card. The CSV is a draft.
+
+4. **Author deferred units and strengthen weak drafts (you).** This is the step
+   the scripts cannot do. For every `deferred` unit in the manifest, and every
+   card the audit flags (`ATOMICITY_REVIEW`, `THIN_EXPLANATION`,
+   `GENERIC_PROMPT`), write or rewrite the card directly in the CSV following the
+   Required Card Contract and Generation Rules below. Turn prose into one atomic,
+   specifically phrased prompt whose `Extra` explains *why* the fact holds rather
+   than restating it. Keep every assessed claim grounded in the cited source;
+   label generated examples and practice `Enrichment:` and inferences
+   `Inference:`. Leave genuinely unsupported units deferred — never fabricate a
+   prompt to clear a warning.
+
+5. Add a source image only when it teaches visual or spatial knowledge. Use
    Markdown image syntax or:
 
    ```text
    [image: https://example.org/diagram.png | alt: This diagram cues the spatial relationship tested by the card.]
    ```
 
-7. Generate an audited CSV plus semantic sidecars:
+6. **Audit (deterministic).** Run the independent rubric audit:
 
    ```bash
-   python scripts/generate_flashcards.py notes.md --output cards/session.csv
-   ```
-
-   Review `<deck>.manifest.json` and `<deck>.coverage.json` for represented,
-   deferred, unsupported, and omitted material.
-
-8. Run the independent rubric audit:
-
-   ```bash
-   python scripts/test_card_quality.py cards/session.csv \
+   python scripts/audit_cards.py cards/session.csv \
      --settings cards/session.settings.json
    ```
 
-9. Review every error and warning against the source. Heuristics can detect likely
-   compounds but cannot prove semantic atomicity.
-10. Show the draft, unresolved units, and coverage report. Require approval before
-    import.
-11. Import the CSV into an Anki note type with matching fields, or use the existing
+   Errors block import; warnings require review against the source. Heuristics
+   can flag likely compounds and thin explanations but cannot prove semantic
+   atomicity — judge each case.
+
+7. Loop steps 4–6 until no errors remain and every warning is resolved or
+   consciously accepted with a reason.
+
+8. Show the draft, the deferred and unsupported units, and the coverage report.
+   Require approval before import.
+
+9. Import the CSV into an Anki note type with matching fields, or use the existing
    Fact JSONL/AnkiConnect pipeline when direct configured import is required.
-12. Report generated, deferred, rejected, duplicate, and imported counts.
+
+10. Report generated, authored, deferred, rejected, duplicate, and imported
+    counts.
+
+The deterministic drafter (step 3) is also the **offline / no-agent fast path**:
+run with structured input it produces a complete deck unattended, deferring only
+what needs an author. When an agent is in the loop, steps 4–7 are mandatory.
 
 ## Input Forms
 
@@ -109,7 +149,9 @@ custom in-card JavaScript.
 
 ## Generation Rules
 
-Apply all rules:
+These are the authoring rules. They bind both the agent (when authoring or
+rewriting cards in step 4) and the deterministic drafter (which only emits a card
+when it can satisfy them, and otherwise defers). Apply all rules:
 
 1. Test one independently gradable fact per card.
 2. Split detectable sentence boundaries, independent clauses, and enumerations.
@@ -168,8 +210,10 @@ Treat these as blocking errors:
 - ease cap above 250%
 - FSRS with a day-or-longer learning step
 
-Treat likely compound facts, inferred claims, and avoidable same-topic runs as
-warnings requiring review. Text-only and naturally single-format decks may pass.
+Treat likely compound facts, inferred claims, generic fallback prompts
+(`GENERIC_PROMPT`), restated explanations (`THIN_EXPLANATION`), and avoidable
+same-topic runs as warnings requiring review. Text-only and naturally
+single-format decks may pass.
 Do not silently discard violations. Write them to
 `<deck>.violations.json` and return a nonzero exit status when errors remain.
 
@@ -186,7 +230,7 @@ def456,45,0.90,0
 Run:
 
 ```bash
-python scripts/test_card_quality.py cards/session.csv \
+python scripts/audit_cards.py cards/session.csv \
   --settings cards/session.settings.json \
   --retention-log reviews.csv
 ```

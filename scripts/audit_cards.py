@@ -15,6 +15,7 @@ from typing import Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from scripts.calibrate import build_report as build_calibration_report  # noqa: E402
 from scripts.generate_flashcards import (  # noqa: E402
     Card,
     GenerationConfig,
@@ -167,9 +168,15 @@ def build_report(
     settings_path: Path | None = None,
     retention_log: Path | None = None,
     coverage_path: Path | None = None,
+    approval_log: Path | None = None,
 ) -> dict[str, object]:
     cards, parse_violations = load_cards(csv_path)
     config, config_violations = load_config(settings_path)
+    retention_data = (
+        analyze_retention(retention_log)
+        if retention_log
+        else {"status": "not-provided", "mature_reviews": 0, "rows": []}
+    )
     if coverage_path is None:
         candidate = csv_path.with_suffix(".coverage.json")
         coverage_path = candidate if candidate.exists() else None
@@ -206,6 +213,8 @@ def build_report(
                 for v in violations
             ),
             "pre_understanding": all(card.extra.startswith("Explanation:") for card in cards),
+            "explanation_substance": not any(v.code == "THIN_EXPLANATION" for v in violations),
+            "prompt_specificity": not any(v.code == "GENERIC_PROMPT" for v in violations),
             "source_grounding": all(bool(card.source) for card in cards),
             "enrichment_labeling": not any(v.code == "UNLABELED_ENRICHMENT" for v in violations),
             "daily_limit": config.new_cards_per_day <= 20,
@@ -214,7 +223,12 @@ def build_report(
         },
         "violations": [asdict(violation) for violation in violations],
         "iteration_actions": actions,
-        "retention": analyze_retention(retention_log) if retention_log else {"status": "not-provided", "mature_reviews": 0, "rows": []},
+        "retention": retention_data,
+        "calibration": build_calibration_report(
+            approval_log=approval_log,
+            retention_log=retention_log,
+            retention=retention_data,
+        ),
         "coverage": coverage,
     }
 
@@ -228,6 +242,15 @@ def print_report(report: dict[str, object]) -> None:
         f"Warnings: {summary['warnings']}"
     )
     print(f"Card types: {summary['card_types']}")
+    calibration = report["calibration"]
+    assert isinstance(calibration, dict)
+    approval = calibration["approval"]
+    assert isinstance(approval, dict)
+    if approval != {"status": "not-provided"}:
+        print(
+            f"Calibration: {approval['approved']}/{approval['total']} first-pass "
+            f"(rate={approval['first_pass_approval_rate']})"
+        )
     checks = report["checks"]
     assert isinstance(checks, dict)
     for name, passed in checks.items():
@@ -250,6 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("deck", type=Path, help="Generated Mnemo CSV deck.")
     parser.add_argument("--settings", type=Path, help="Generator .settings.json sidecar.")
     parser.add_argument("--retention-log", type=Path, help="Review log CSV with predicted/actual retention.")
+    parser.add_argument("--approval-log", type=Path, help="Approval decision CSV.")
     parser.add_argument("--coverage", type=Path, help="Objective coverage .coverage.json sidecar.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
@@ -268,7 +292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if coverage is None:
         candidate = args.deck.with_suffix(".coverage.json")
         coverage = candidate if candidate.exists() else None
-    report = build_report(args.deck, settings, args.retention_log, coverage)
+    report = build_report(args.deck, settings, args.retention_log, coverage, args.approval_log)
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:

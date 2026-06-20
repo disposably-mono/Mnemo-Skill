@@ -5,7 +5,7 @@ plain data here (name, fields, card templates, CSS) so they can be validated
 without Anki or genanki installed; the import backends turn them into real
 models (AnkiConnect ``createModel`` / genanki ``Model``).
 
-Design system: ported from ``colors_and_type.css`` (the MONO tokens). Per Anki
+Design system: built from the MONO color and typography tokens. Per Anki
 convention the default ``.card`` is the *light* theme and ``.nightMode`` carries
 the *dark* theme (Anki toggles ``.nightMode``, not ``[data-theme]``).
 """
@@ -57,7 +57,7 @@ class NoteType:
 # --------------------------------------------------------------------------
 
 MONO_CSS = """\
-/* MONO note-type styling — ported from colors_and_type.css. */
+/* MONO note-type styling. */
 @font-face {
   font-family: 'DM Serif Display';
   src: url('_dmserifdisplay-regular.ttf');

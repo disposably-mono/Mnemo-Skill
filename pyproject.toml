@@ -1,7 +1,7 @@
 [project]
 name = "mnemo"
 version = "0.0.1"
-description = "Claude Code skill + toolkit that turns study material into high-quality Anki cards via AnkiConnect."
+description = "Source-grounded knowledge planning and high-quality Anki authoring via AnkiConnect."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"

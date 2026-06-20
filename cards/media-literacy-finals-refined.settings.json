@@ -1,0 +1,17 @@
+{
+  "learning_steps": [
+    "10m",
+    "1d"
+  ],
+  "graduating_interval_days": 3,
+  "easy_interval_days": 7,
+  "starting_ease_percent": 250,
+  "max_ease_percent": 250,
+  "new_cards_per_day": 20,
+  "scheduler": "legacy-sm2",
+  "easy_button_policy": "avoid",
+  "interleave_topics": true,
+  "seed": 42,
+  "portable_easy_button_enforcement": false,
+  "note": "CSV import cannot disable Anki's Easy button; 'avoid' is a review policy."
+}

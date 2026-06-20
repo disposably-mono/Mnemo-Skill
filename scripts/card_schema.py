@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from scripts.knowledge import KNOWLEDGE_KINDS, ORIGINS
+
 FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list", "typed", "image_occlusion")
 GRADES: tuple[str, ...] = ("far", "medium", "near")
 
@@ -59,6 +61,13 @@ class Fact:
     tags: list[str] = field(default_factory=list)
     source: str | None = None
     distractors: list[Distractor] = field(default_factory=list)
+    id: str | None = None
+    knowledge_unit_id: str | None = None
+    knowledge_kind: str | None = None
+    objective_ids: list[str] = field(default_factory=list)
+    prerequisite_ids: list[str] = field(default_factory=list)
+    origin: str | None = None
+    confidence: float | None = None
 
     # --- construction -------------------------------------------------------
 
@@ -82,6 +91,13 @@ class Fact:
             tags=tags,
             source=data.get("source"),
             distractors=distractors,
+            id=data.get("id"),
+            knowledge_unit_id=data.get("knowledge_unit_id"),
+            knowledge_kind=data.get("knowledge_kind"),
+            objective_ids=data.get("objective_ids") or [],
+            prerequisite_ids=data.get("prerequisite_ids") or [],
+            origin=data.get("origin"),
+            confidence=data.get("confidence"),
         )
         validate_fact(fact)
         return fact
@@ -101,6 +117,14 @@ class Fact:
             out["source"] = self.source
         if self.distractors:
             out["distractors"] = [d.to_dict() for d in self.distractors]
+        for key in ("id", "knowledge_unit_id", "knowledge_kind", "origin", "confidence"):
+            value = getattr(self, key)
+            if value is not None:
+                out[key] = value
+        if self.objective_ids:
+            out["objective_ids"] = list(self.objective_ids)
+        if self.prerequisite_ids:
+            out["prerequisite_ids"] = list(self.prerequisite_ids)
         return out
 
 
@@ -135,6 +159,32 @@ def validate_fact(fact: Fact) -> None:
     if fact.source is not None and not isinstance(fact.source, str):
         raise CardValidationError("source must be a string when provided")
 
+    for name in ("id", "knowledge_unit_id"):
+        value = getattr(fact, name)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise CardValidationError(f"{name} must be a non-empty string when provided")
+
+    if fact.knowledge_kind is not None and fact.knowledge_kind not in KNOWLEDGE_KINDS:
+        raise CardValidationError(
+            f"knowledge_kind must be one of {KNOWLEDGE_KINDS}, got {fact.knowledge_kind!r}"
+        )
+    _validate_id_list(fact.objective_ids, "objective_ids")
+    _validate_id_list(fact.prerequisite_ids, "prerequisite_ids")
+    if fact.origin is not None and fact.origin not in ORIGINS:
+        raise CardValidationError(f"origin must be one of {ORIGINS}, got {fact.origin!r}")
+    if fact.confidence is not None and (
+        isinstance(fact.confidence, bool)
+        or not isinstance(fact.confidence, (int, float))
+        or not 0 <= fact.confidence <= 1
+    ):
+        raise CardValidationError("confidence must be a number between 0 and 1")
+    if fact.origin is not None and (fact.source is None or not fact.source.strip()):
+        raise CardValidationError("semantically classified facts require source provenance")
+    if fact.origin == "generated-enrichment" and not _has_visible_enrichment_label(fact):
+        raise CardValidationError(
+            "generated-enrichment facts require a visible 'Enrichment:' label"
+        )
+
     if fact.distractors and fact.type not in {"qa", "cloze"}:
         raise CardValidationError(
             f"distractors are not allowed on {fact.type!r} facts"
@@ -151,6 +201,25 @@ def _validate_tags(tags: list[str]) -> None:
             raise CardValidationError("each tag must be a non-empty string")
         if _WHITESPACE.search(tag):
             raise CardValidationError(f"tag {tag!r} may not contain whitespace")
+
+
+def _validate_id_list(values: list[str], name: str) -> None:
+    if not isinstance(values, list):
+        raise CardValidationError(f"{name} must be a list of strings")
+    if any(not isinstance(value, str) or not value.strip() for value in values):
+        raise CardValidationError(f"{name} must contain non-empty strings")
+
+
+def _has_visible_enrichment_label(fact: Fact) -> bool:
+    prompt_keys = {
+        "qa": "front",
+        "cloze": "text",
+        "list": "title",
+        "typed": "prompt",
+        "image_occlusion": "header",
+    }
+    value = fact.content.get(prompt_keys[fact.type], "")
+    return isinstance(value, str) and "Enrichment:" in value
 
 
 def _require_nonempty_str(content: dict[str, Any], key: str, kind: str) -> None:

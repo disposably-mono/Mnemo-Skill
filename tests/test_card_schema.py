@@ -251,6 +251,41 @@ def test_to_dict_from_dict_round_trip():
     assert fact.to_dict() == src
 
 
+def test_semantic_metadata_round_trip_is_backward_compatible():
+    src = {
+        "type": "typed",
+        "content": {"prompt": "ROI formula?", "answer": "profit / cost"},
+        "deck": "Business",
+        "tags": ["quantitative"],
+        "source": "lecture.pdf p.4",
+        "id": "fact-roi",
+        "knowledge_unit_id": "unit-roi",
+        "knowledge_kind": "formula",
+        "objective_ids": ["objective-1"],
+        "prerequisite_ids": ["unit-profit"],
+        "origin": "source",
+        "confidence": 0.95,
+    }
+
+    assert Fact.from_dict(src).to_dict() == src
+
+
+def test_generated_enrichment_requires_visible_label_and_source():
+    base = {
+        "type": "qa",
+        "content": {"front": "Apply the formula.", "back": "42"},
+        "deck": "Practice",
+        "tags": [],
+        "source": "generated from lecture.pdf p.2",
+        "origin": "generated-enrichment",
+    }
+    with pytest.raises(CardValidationError, match="Enrichment"):
+        Fact.from_dict(base)
+
+    base["content"]["front"] = "Enrichment: Apply the formula."
+    assert Fact.from_dict(base).origin == "generated-enrichment"
+
+
 def test_jsonl_dump_and_load_round_trip(tmp_path):
     facts = [
         Fact.from_dict({"type": "qa", "content": {"front": "Q1", "back": "A1"},

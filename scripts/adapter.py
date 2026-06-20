@@ -149,6 +149,13 @@ def _placeholders(
         "source": fact.source or "",
         "deck": fact.deck,
         "tags": " ".join(fact.tags),
+        "fact_id": fact.id or "",
+        "knowledge_unit_id": fact.knowledge_unit_id or "",
+        "knowledge_kind": fact.knowledge_kind or "",
+        "objective_ids": " ".join(fact.objective_ids),
+        "prerequisite_ids": " ".join(fact.prerequisite_ids),
+        "origin": fact.origin or "",
+        "confidence": "" if fact.confidence is None else str(fact.confidence),
     }
     if fact.type == "qa":
         return {**common, "front": content["front"], "back": content["back"],

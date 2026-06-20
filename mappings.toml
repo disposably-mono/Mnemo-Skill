@@ -8,7 +8,9 @@
 #   list  -> {title}, {items}, {extra}
 #   typed -> {prompt}, {answer}, {hints}, {extra}
 #   image_occlusion -> {image}, {occlusion}, {header}, {back_extra}, {comments}
-# Every type also supports {source}, {deck}, and {tags}.
+# Every type also supports {source}, {deck}, {tags}, {fact_id},
+# {knowledge_unit_id}, {knowledge_kind}, {objective_ids}, {prerequisite_ids},
+# {origin}, and {confidence}.
 #
 # Example: target the stock "Basic" note type for qa Facts.
 # [qa."Basic"]

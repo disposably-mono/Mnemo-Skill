@@ -123,6 +123,61 @@ def test_split_list_items_still_splits_genuine_enumerations():
     assert split_list_items("1, 2, 3") == ["1", "2", "3"]
 
 
+def test_parse_content_preserves_fenced_code_as_one_verbatim_unit():
+    source = """
+```python
+for i in range(3):
+    print(i)
+```
+"""
+
+    units = parse_content(source, "example.md")
+
+    assert len(units) == 1
+    assert units[0].text == "for i in range(3):\n    print(i)"
+    assert units[0].verbatim_kind == "code"
+    assert units[0].verbatim_language == "python"
+
+
+def test_parse_content_preserves_display_math_as_one_verbatim_unit():
+    units = parse_content("$$\nE = mc^2\n$$", "physics.md")
+
+    assert len(units) == 1
+    assert units[0].text == "$$\nE = mc^2\n$$"
+    assert units[0].verbatim_kind == "math"
+
+
+def test_parse_content_preserves_same_line_display_math_without_formula_classification():
+    source = "$$ E = mc^2 $$"
+    units = parse_content(source, "physics.md")
+    _, knowledge = plan_knowledge(units, source, "physics.md")
+
+    assert len(units) == 1
+    assert units[0].text == source
+    assert units[0].verbatim_kind == "math"
+    assert knowledge[0].kind == "fact"
+
+
+def test_parse_content_accepts_fence_language_after_whitespace():
+    units = parse_content("``` python\nprint(1)\n```")
+
+    assert len(units) == 1
+    assert units[0].text == "print(1)"
+    assert units[0].verbatim_language == "python"
+
+
+def test_parse_content_keeps_unterminated_verbatim_blocks_opaque():
+    code_units = parse_content("```python\nint x = 5;")
+    math_units = parse_content("$$\nE = mc^2")
+
+    assert [(unit.text, unit.verbatim_kind) for unit in code_units] == [
+        ("int x = 5;", "code")
+    ]
+    assert [(unit.text, unit.verbatim_kind) for unit in math_units] == [
+        ("$$\nE = mc^2", "math")
+    ]
+
+
 def test_estimate_components_ignores_thousands_separator_commas():
     assert estimate_components("1,234,567,890,123") == 1
 

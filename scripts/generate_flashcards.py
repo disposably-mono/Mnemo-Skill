@@ -37,6 +37,12 @@ from scripts.knowledge import (
     objective_label,
     stable_id,
 )
+from scripts.verbatim import (
+    fenced_code_opening,
+    is_display_math_delimiter,
+    is_fenced_code_closing,
+    is_single_line_display_math,
+)
 
 
 CSV_FIELDS = (
@@ -152,6 +158,8 @@ class SourceUnit:
     prerequisite_ids: list[str] = field(default_factory=list)
     origin: str = "source"
     confidence: float = 1.0
+    verbatim_kind: str = ""
+    verbatim_language: str = ""
 
 
 @dataclass
@@ -262,6 +270,93 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
         raw = lines[index]
         line = raw.strip()
         line_number = index + 1
+        code_opening = fenced_code_opening(raw)
+        if code_opening:
+            flush_paragraph(line_number)
+            marker, language = code_opening
+            closing_index = index + 1
+            while closing_index < len(lines) and not is_fenced_code_closing(
+                lines[closing_index], marker
+            ):
+                closing_index += 1
+            if closing_index < len(lines):
+                image_url, image_alt = pending_image or ("", "")
+                units.append(
+                    SourceUnit(
+                        text="\n".join(lines[index + 1:closing_index]),
+                        topic=topic,
+                        source=source_at(line_number),
+                        image_url=image_url,
+                        image_alt=image_alt,
+                        verbatim_kind="code",
+                        verbatim_language=language,
+                    )
+                )
+                pending_image = None
+                index = closing_index + 1
+                continue
+            units.append(
+                SourceUnit(
+                    text="\n".join(lines[index + 1:]),
+                    topic=topic,
+                    source=source_at(line_number),
+                    verbatim_kind="code",
+                    verbatim_language=language,
+                )
+            )
+            index = len(lines)
+            continue
+
+        if is_single_line_display_math(raw):
+            flush_paragraph(line_number)
+            image_url, image_alt = pending_image or ("", "")
+            units.append(
+                SourceUnit(
+                    text=line,
+                    topic=topic,
+                    source=source_at(line_number),
+                    image_url=image_url,
+                    image_alt=image_alt,
+                    verbatim_kind="math",
+                )
+            )
+            pending_image = None
+            index += 1
+            continue
+
+        if is_display_math_delimiter(raw):
+            flush_paragraph(line_number)
+            closing_index = index + 1
+            while closing_index < len(lines) and not is_display_math_delimiter(
+                lines[closing_index]
+            ):
+                closing_index += 1
+            if closing_index < len(lines):
+                image_url, image_alt = pending_image or ("", "")
+                units.append(
+                    SourceUnit(
+                        text="\n".join(lines[index:closing_index + 1]),
+                        topic=topic,
+                        source=source_at(line_number),
+                        image_url=image_url,
+                        image_alt=image_alt,
+                        verbatim_kind="math",
+                    )
+                )
+                pending_image = None
+                index = closing_index + 1
+                continue
+            units.append(
+                SourceUnit(
+                    text="\n".join(lines[index:]),
+                    topic=topic,
+                    source=source_at(line_number),
+                    verbatim_kind="math",
+                )
+            )
+            index = len(lines)
+            continue
+
         if not line:
             flush_paragraph(line_number)
             objective_block = False
@@ -432,7 +527,10 @@ def plan_knowledge(
     knowledge_units: list[KnowledgeUnit] = []
     definitions_by_topic: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for unit in units:
-        kind, purpose = classify_knowledge(unit.text, unit.question)
+        if unit.verbatim_kind:
+            kind, purpose = "fact", "recall"
+        else:
+            kind, purpose = classify_knowledge(unit.text, unit.question)
         unit_id = stable_id("unit", unit.text, unit.question, unit.answer, unit.source)
         objective_ids = assign_objectives(
             unit, by_topic.get(unit.topic) or by_topic.get("General", [])

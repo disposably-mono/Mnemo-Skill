@@ -381,3 +381,75 @@ def test_mapped_image_occlusion_keeps_media_upload(tmp_path):
     )
     assert note.fields["Bild"] == '<img src="heart.png">'
     assert note.media == [image]
+
+
+# --- HTML escaping tests (Bug fix #8) -----------------------------------------
+
+def test_distractor_text_with_html_special_chars_is_escaped():
+    """Distractor text containing <, >, & should be HTML-escaped in confusions block."""
+    fact = _qa(distractors=[
+        {"text": "a < b & c", "grade": "near"},
+    ])
+    html_output = adapt(fact).fields["Distractors"]
+    # Raw < and & should NOT be present
+    assert "a < b & c" not in html_output
+    # Escaped versions should be present
+    assert "a &lt; b &amp; c" in html_output
+    # HTML structure should still be intact
+    assert '<li class="near">' in html_output
+    assert "</li>" in html_output
+
+
+def test_hint_text_with_html_special_chars_is_escaped_in_mapping():
+    """Hint text containing < should be HTML-escaped when rendered as HTML in mappings."""
+    fact = Fact.from_dict({
+        "type": "typed",
+        "content": {
+            "prompt": "What is 2 < 3?",
+            "answer": "true",
+            "hints": ["Compare using <", "It's a boolean"],
+        },
+        "deck": "Logic",
+        "tags": [],
+    })
+    mappings = {
+        "typed": {
+            "Custom": {
+                "Question": "{prompt}",
+                "Answer": "{answer}",
+                "AllHints": "{hints}",
+            }
+        }
+    }
+    note = adapt(fact, mappings)
+    hints_html = note.fields["AllHints"]
+    # Raw < should NOT be present in hints
+    assert "Compare using <" not in hints_html
+    # Escaped version should be present
+    assert "Compare using &lt;" in hints_html
+    # Hints should be joined with <br>
+    assert "&lt;br&gt;" not in hints_html  # <br> itself shouldn't be escaped
+    assert "<br>" in hints_html  # <br> should be literal
+
+
+def test_list_item_with_html_special_chars_and_braces_is_escaped():
+    """List item text with }}, <, & should be escaped while cloze wrapper stays functional."""
+    fact = Fact.from_dict({
+        "type": "list",
+        "content": {
+            "title": "Items",
+            "items": ["Normal item", "Item with }}", "Item with < and &"],
+        },
+        "deck": "Test",
+        "tags": [],
+    })
+    note = adapt(fact)
+    text = note.fields["Text"]
+    # Normal item should work
+    assert "{{c1::Normal item}}" in text
+    # Item with }} should have }} escaped
+    assert "{{c2::Item with }}}}" in text  # }} becomes }}}}
+    # Item with < and & should be escaped
+    assert "{{c3::Item with &lt; and &amp;}}" in text
+    # Cloze structure should remain intact
+    assert "{{c1::" in text and "{{c2::" in text and "{{c3::" in text

@@ -286,13 +286,13 @@ def _render_list_items(fact: Fact) -> str:
     """An overlapping-cloze ``<ol>``: one numbered deletion per list item."""
     items = fact.content["items"]
     lis = "".join(
-        f'<li>{{{{c{i}::{item}}}}}</li>' for i, item in enumerate(items, start=1)
+        f'<li>{{{{c{i}::{html.escape(item)}}}}}</li>' for i, item in enumerate(items, start=1)
     )
     return f'<ol class="mono-list">{lis}</ol>'
 
 
 def _render_hints(hints: list[str]) -> str:
-    return "<br>".join(hints)
+    return "<br>".join(html.escape(hint) for hint in hints)
 
 
 def _render_occlusions(content: dict[str, Any]) -> str:
@@ -330,7 +330,7 @@ def _render_confusions(fact: Fact) -> str:
     for grade in _GRADE_ORDER:
         for d in fact.distractors:
             if d.grade == grade:
-                items.append(f'<li class="{grade}">{d.text}</li>')
+                items.append(f'<li class="{grade}">{html.escape(d.text)}</li>')
     body = "".join(items)
     return (
         '<div class="confusions">'

@@ -171,6 +171,9 @@ when it can satisfy them, and otherwise defers). Apply all rules:
 12. Preserve source provenance and stable card and knowledge-unit IDs.
 13. Do not import until each objective is covered, deferred, unsupported, or
     intentionally omitted and the user has approved the draft.
+14. Treat code and LaTex/MathJax notation as verbatim. Use QA or cloze rather
+    than typed cards for multiline code or mathematical expressions; reserve
+    typed answers for short canonical dates, symbols, and answers.
 
 ## Scheduler Policy
 

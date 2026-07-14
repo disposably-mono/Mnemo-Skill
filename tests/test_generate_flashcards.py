@@ -1,5 +1,6 @@
 import csv
 import json
+from collections import Counter
 
 from scripts.generate_flashcards import (
     Card,
@@ -7,6 +8,7 @@ from scripts.generate_flashcards import (
     analyze_retention,
     atomic_units,
     build_cards,
+    choose_card_type,
     estimate_components,
     interleave_cards,
     looks_compound,
@@ -178,6 +180,19 @@ def test_parse_content_keeps_unterminated_verbatim_blocks_opaque():
     assert [(unit.text, unit.verbatim_kind) for unit in math_units] == [
         ("$$\nE = mc^2", "math")
     ]
+
+
+def test_verbatim_units_use_qa_instead_of_typed_cards():
+    code_unit = parse_content("```python\nint x = 5;\n```")[0]
+    math_unit = parse_content("$$ E = mc^2 $$")[0]
+
+    assert choose_card_type(code_unit, 0, Counter()) == "qa"
+    assert choose_card_type(math_unit, 0, Counter()) == "qa"
+    assert build_cards([math_unit])[0].card_type == "qa"
+    inline_math = parse_content("The derivative is \\frac{dy}{dx}.")[0]
+    inline_math.knowledge_kind = "formula"
+    assert choose_card_type(inline_math, 0, Counter()) == "qa"
+    assert "mnemo-verbatim-code" in build_cards([code_unit])[0].tags
 
 
 def test_inline_verbatim_spans_are_opaque_to_prose_splitting_and_counts():

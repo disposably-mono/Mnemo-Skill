@@ -35,6 +35,22 @@ def test_qa_without_source_yields_empty_source_field():
     assert note.fields["Source"] == ""
 
 
+def test_qa_can_target_mono_code_and_escapes_code_html():
+    note = adapt(
+        _qa(content={"front": "What does this print?", "back": "if a < b:\n    print(a & b)"}),
+        target_models={"qa": "MONO Code"},
+    )
+
+    assert note.model == "MONO Code"
+    assert note.fields["Code"] == "if a &lt; b:\n    print(a &amp; b)"
+
+
+def test_code_tag_routes_qa_to_mono_code():
+    note = adapt(_qa(tags=["mnemo-verbatim-code"]))
+
+    assert note.model == "MONO Code"
+
+
 def test_qa_distractors_render_grouped_confusions():
     fact = _qa(distractors=[
         {"text": "Sydney", "grade": "near"},

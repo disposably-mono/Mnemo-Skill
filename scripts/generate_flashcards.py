@@ -42,6 +42,7 @@ from scripts.verbatim import (
     is_display_math_delimiter,
     is_fenced_code_closing,
     is_single_line_display_math,
+    has_inline_verbatim,
     protect_inline_verbatim,
     restore_inline_verbatim,
     without_inline_verbatim,
@@ -780,7 +781,8 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
                 f'alt="{html.escape(image_alt, quote=True)}">'
             )
         extra = build_extra(unit, front, back)
-        tags = [*unit.tags, slugify(unit.topic), "auto"]
+        verbatim_tag = ["mnemo-verbatim-code"] if unit.verbatim_kind == "code" else []
+        tags = [*unit.tags, *verbatim_tag, slugify(unit.topic), "auto"]
         card_id = stable_card_id(front, back, unit.source)
         card = Card(
             front=front,
@@ -811,6 +813,13 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
 def choose_card_type(unit: SourceUnit, index: int, counts: Counter[str]) -> str:
     if unit.image_url:
         return "image-supported"
+    if (
+        unit.verbatim_kind
+        or has_inline_verbatim(unit.text)
+        or has_inline_verbatim(unit.answer)
+        or re.search(r"\\[A-Za-z]+", f"{unit.text} {unit.answer}")
+    ):
+        return "qa"
     if unit.knowledge_kind == "formula" or exact_answer_candidate(unit.answer):
         return "typed"
     if unit.question:
@@ -848,6 +857,8 @@ def reversible_definition(unit: SourceUnit) -> bool:
 
 
 def render_prompt(unit: SourceUnit, card_type: str) -> tuple[str, str]:
+    if unit.verbatim_kind == "math":
+        return "What expression is displayed?", unit.text
     if card_type == "reverse" and unit.question and unit.answer:
         term = definition_term(unit.question)
         if term:

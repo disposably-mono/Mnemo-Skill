@@ -166,7 +166,7 @@ def test_ensure_note_types_creates_missing_models_with_cloze_flag():
     })
     AnkiConnect(URL).ensure_note_types(MONO_NOTE_TYPES.values())
     names = {c["modelName"] for c in created}
-    assert names == {"MONO Cloze", "MONO Overlapping", "MONO Type"}
+    assert names == {"MONO Cloze", "MONO Code", "MONO Overlapping", "MONO Type"}
     cloze_payload = next(c for c in created if c["modelName"] == "MONO Cloze")
     assert cloze_payload["isCloze"] is True
     assert "Text" in cloze_payload["inOrderFields"]

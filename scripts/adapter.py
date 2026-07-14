@@ -103,9 +103,14 @@ def adapt(
     mapping_group = (mappings or {}).get(fact.type, {})
     if configured_target is None and mapping_group:
         configured_target = next(iter(mapping_group))
-    model_name = configured_target or _DEFAULT_MODELS[fact.type]
+    model_name = configured_target or (
+        "MONO Code" if fact.type == "qa" and "mnemo-verbatim-code" in fact.tags
+        else _DEFAULT_MODELS[fact.type]
+    )
 
-    if model_name != _DEFAULT_MODELS[fact.type]:
+    if model_name != _DEFAULT_MODELS[fact.type] and not (
+        fact.type == "qa" and model_name == "MONO Code"
+    ):
         field_templates = mapping_group.get(model_name)
         if field_templates is None:
             raise MappingError(
@@ -130,7 +135,8 @@ def adapt(
             media=media,
         )
 
-    fields, media = _BUILDERS[fact.type](fact, media_root)
+    builder = _build_code if model_name == "MONO Code" else _BUILDERS[fact.type]
+    fields, media = builder(fact, media_root)
     return AnkiNote(
         model=model_name,
         deck=fact.deck,
@@ -218,6 +224,17 @@ def _build_qa(
         "Front": fact.content["front"],
         "Back": fact.content["back"],
         "Distractors": _render_confusions(fact),
+        "Source": fact.source or "",
+    }, [])
+
+
+def _build_code(
+    fact: Fact, media_root: str | Path | None
+) -> tuple[dict[str, str], list[Path]]:
+    return ({
+        "Front": fact.content["front"],
+        "Code": html.escape(fact.content["back"]),
+        "Extra": fact.content.get("extra", ""),
         "Source": fact.source or "",
     }, [])
 

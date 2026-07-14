@@ -63,6 +63,12 @@ def without_inline_verbatim(text: str) -> str:
     return _INLINE_SENTINEL.sub(" ", masked)
 
 
+def has_inline_verbatim(text: str) -> bool:
+    """Return whether text contains a complete inline code or math span."""
+    _, spans = protect_inline_verbatim(text)
+    return bool(spans)
+
+
 def _inline_span_end(text: str, start: int) -> int | None:
     character = text[start]
     if character == "`":

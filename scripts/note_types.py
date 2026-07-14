@@ -276,7 +276,23 @@ MONO_TYPE = NoteType(
     css=MONO_CSS,
 )
 
+MONO_CODE = NoteType(
+    name="MONO Code",
+    fields=("Front", "Code", "Extra", "Source"),
+    templates=(
+        CardTemplate(
+            name="Code Recall",
+            qfmt='<div class="mono-label">Code</div><div class="mono-q">{{Front}}</div>',
+            afmt=(
+                "{{FrontSide}}<hr id=\"answer\"><pre><code>{{Code}}</code></pre>"
+                '{{#Extra}}<div class="mono-a">{{Extra}}</div>{{/Extra}}' + _SOURCE_BLOCK
+            ),
+        ),
+    ),
+    css=MONO_CSS + "\npre { overflow-x: auto; }\npre code { font-family: var(--font-mono); }\n",
+)
+
 
 MONO_NOTE_TYPES: dict[str, NoteType] = {
-    nt.name: nt for nt in (MONO_BASIC, MONO_CLOZE, MONO_OVERLAPPING, MONO_TYPE)
+    nt.name: nt for nt in (MONO_BASIC, MONO_CLOZE, MONO_OVERLAPPING, MONO_TYPE, MONO_CODE)
 }

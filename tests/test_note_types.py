@@ -3,13 +3,14 @@
 from scripts.note_types import (
     MONO_BASIC,
     MONO_CLOZE,
+    MONO_CODE,
     MONO_NOTE_TYPES,
     MONO_OVERLAPPING,
     MONO_TYPE,
     referenced_fields,
 )
 
-EXPECTED_NAMES = {"MONO Basic", "MONO Cloze", "MONO Overlapping", "MONO Type"}
+EXPECTED_NAMES = {"MONO Basic", "MONO Cloze", "MONO Code", "MONO Overlapping", "MONO Type"}
 
 
 def test_registry_has_all_bundled_note_types():
@@ -72,6 +73,12 @@ def test_typed_note_type_uses_native_answer_and_hint_filters():
     assert "{{type:Answer}}" in template.qfmt
     assert "{{type:Answer}}" in template.afmt
     assert "{{hint:Hint 1}}" in template.qfmt
+
+
+def test_code_note_type_uses_a_monospace_code_block():
+    template = MONO_CODE.templates[0]
+    assert "<pre><code>{{Code}}</code></pre>" in template.afmt
+    assert "var(--font-mono)" in MONO_CODE.css
 
 
 def test_referenced_fields_ignores_builtins_and_handles_prefixes():

@@ -120,6 +120,21 @@ def test_print_report_shows_first_pass_calibration_when_approval_data_exists(
     assert "Calibration: 9/10 first-pass (rate=0.9)" in output.out
 
 
+def test_non_numeric_confidence_produces_csv_row_violation_without_crashing(tmp_path):
+    fieldnames = CARD_FIELDS + ("Confidence",)
+    good_row = {**card_row(), "Confidence": "0.9"}
+    bad_row = {**card_row(back="two"), "Confidence": "high"}
+    deck = write_csv(tmp_path / "deck.csv", fieldnames, [good_row, bad_row])
+
+    report = build_report(deck)
+
+    assert report["summary"]["cards"] == 1
+    assert any(
+        violation["code"] == "CSV_ROW" and "Line 3" in violation["message"]
+        for violation in report["violations"]
+    )
+
+
 def test_approval_log_cli_argument_preserves_passing_exit_code(tmp_path, capsys):
     deck = write_csv(tmp_path / "deck.csv", CARD_FIELDS, [card_row()])
     approval_log = write_csv(

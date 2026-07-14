@@ -69,7 +69,7 @@ def load_cards(path: Path) -> tuple[list[Card], list[Violation]]:
                         confidence=float(row.get("Confidence") or 1.0),
                     )
                 )
-            except (AttributeError, TypeError) as exc:
+            except (AttributeError, TypeError, ValueError) as exc:
                 violations.append(
                     Violation(
                         "error",

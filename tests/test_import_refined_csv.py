@@ -2,6 +2,7 @@ import csv
 
 import pytest
 
+from scripts.card_schema import CardValidationError
 from scripts.import_refined_csv import (
     BASIC_MODEL,
     CLOZE_MODEL,
@@ -14,6 +15,7 @@ from scripts.import_refined_csv import (
     existing_card_ids,
     import_refined_csv,
     load_notes,
+    row_to_fact,
 )
 
 
@@ -132,6 +134,94 @@ def test_refined_basic_and_cloze_templates_render_the_image():
         assert "{{ImageURL}}" in afmt, note_type.name
         assert "{{ImageAlt}}" in afmt, note_type.name
         assert "{{#ImageURL}}" in afmt, note_type.name
+
+
+# --- row_to_fact ------------------------------------------------------------
+
+def test_row_to_fact_maps_each_card_type():
+    base = {"Front": "A {{c1::cloze}} question?", "Back": "An answer",
+            "Extra": "why", "Mnemonic": "hook", "Topic": "T", "CardID": "x"}
+    expected = {
+        "cloze": ("cloze", {"text": "A {{c1::cloze}} question?"}),
+        "typed": ("typed", {"prompt": "A {{c1::cloze}} question?",
+                            "answer": "An answer"}),
+        "qa": ("qa", {"front": "A {{c1::cloze}} question?", "back": "An answer"}),
+        "reverse": ("qa", {}),
+        "image-supported": ("qa", {}),
+        "list": ("qa", {}),
+        "": ("qa", {}),
+        "unknown": ("qa", {}),
+    }
+    for card_type, (fact_type, content) in expected.items():
+        fact = row_to_fact({**base, "CardType": card_type}, "Deck")
+        assert fact.type == fact_type, card_type
+        for key, value in content.items():
+            assert fact.content[key] == value, card_type
+        assert fact.content["extra"] == "why"
+        assert fact.content["mnemonic"] == "hook"
+        assert fact.content["topic"] == "T"
+        assert fact.id == "x"
+        assert fact.deck == "Deck"
+
+
+def test_row_to_fact_carries_semantic_metadata():
+    fact = row_to_fact({
+        "Front": "Q?", "Back": "A", "CardType": "qa", "CardID": "roi-1",
+        "Tags": "finance", "Source": "lecture.pdf p.2",
+        "KnowledgeUnitID": "unit-roi", "KnowledgeKind": "formula",
+        "Origin": "source", "ObjectiveIDs": "objective-roi",
+        "PrerequisiteIDs": "unit-profit", "Confidence": "0.9",
+    }, "Deck")
+    assert fact.source == "lecture.pdf p.2"
+    assert fact.knowledge_unit_id == "unit-roi"
+    assert fact.knowledge_kind == "formula"
+    assert fact.origin == "source"
+    assert fact.objective_ids == ["objective-roi"]
+    assert fact.prerequisite_ids == ["unit-profit"]
+    assert fact.confidence == 0.9
+    assert "finance" in fact.tags and "mnemo-kind-formula" in fact.tags
+
+
+def test_row_to_fact_rejects_malformed_metadata():
+    base = {"Front": "Q?", "Back": "A", "CardType": "qa", "CardID": "x"}
+    with pytest.raises(CardValidationError, match="knowledge_kind"):
+        row_to_fact({**base, "KnowledgeKind": "vibes"}, "Deck")
+    with pytest.raises(CardValidationError, match="Confidence"):
+        row_to_fact({**base, "Confidence": "high"}, "Deck")
+    with pytest.raises(CardValidationError, match="CardID"):
+        row_to_fact({"Front": "Q?", "Back": "A", "CardType": "qa"}, "Deck")
+
+
+def test_malformed_metadata_surfaces_with_csv_line_number(tmp_path):
+    path = tmp_path / "cards.csv"
+    _write(path, [
+        {"Front": "Q1", "Back": "A1", "CardType": "qa", "CardID": "1"},
+        {"Front": "Q2", "Back": "A2", "CardType": "qa", "CardID": "2",
+         "Origin": "not-a-real-origin"},
+    ])
+    with pytest.raises(ValueError, match="line 3.*origin"):
+        load_notes(path, "Deck")
+
+
+def test_image_supported_card_keeps_back_html(tmp_path):
+    image = tmp_path / "diagram.png"
+    image.write_bytes(b"png")
+    back_html = 'See <b>the diagram</b> &amp; label the <i>atria</i>.'
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Which chambers receive blood?", "Back": back_html,
+        "CardType": "image-supported", "CardID": "heart-1",
+        "ImageURL": image.name, "ImageAlt": "heart diagram",
+    }])
+
+    notes, media = load_notes(path, "Deck")
+
+    assert notes[0].model == BASIC_MODEL
+    assert notes[0].fields["Back"] == back_html
+    assert notes[0].fields["CardType"] == "image-supported"
+    assert notes[0].fields["ImageURL"] == "diagram.png"
+    assert notes[0].fields["ImageAlt"] == "heart diagram"
+    assert media == [image]
 
 
 class FakeResult:

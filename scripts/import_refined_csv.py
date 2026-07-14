@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Import a Mnemo refined CSV into a dedicated Anki deck via AnkiConnect."""
+"""Import a Mnemo refined CSV into a dedicated Anki deck via AnkiConnect.
+
+Each CSV row is converted into a validated Fact (``row_to_fact``) and rendered
+through the shared note-type adapter (``scripts.adapter.adapt``) using the
+``REFINED_MAPPINGS`` field templates; only presentation-only CSV columns are
+copied into the note afterwards (see ``_apply_passthrough``).
+"""
 
 from __future__ import annotations
 
@@ -13,8 +19,9 @@ from typing import Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.adapter import AnkiNote
+from scripts.adapter import AnkiNote, Mappings, adapt
 from scripts.anki_connect import AnkiConnect, AnkiConnectError
+from scripts.card_schema import CardValidationError, Fact
 from scripts.note_types import CardTemplate, MONO_CSS, NoteType
 
 
@@ -134,6 +141,153 @@ class RefinedImportReport:
     synced: bool
 
 
+# How a refined Fact renders into the refined note types: a plain adapter
+# mappings dict, so the CSV path shares the exact rendering machinery used by
+# the JSONL/Fact path (scripts.adapter.adapt).
+REFINED_MAPPINGS: Mappings = {
+    "qa": {BASIC_MODEL: {
+        "Front": "{front}", "Back": "{back}", "Extra": "{extra}",
+        "Mnemonic": "{mnemonic}", "Topic": "{topic}", "Source": "{source}",
+        "CardID": "{fact_id}",
+    }},
+    "cloze": {CLOZE_MODEL: {
+        "Text": "{text}", "Extra": "{extra}", "Mnemonic": "{mnemonic}",
+        "Topic": "{topic}", "Source": "{source}", "CardID": "{fact_id}",
+    }},
+    "typed": {TYPED_MODEL: {
+        "Prompt": "{prompt}", "Answer": "{answer}", "Extra": "{extra}",
+        "Mnemonic": "{mnemonic}", "Topic": "{topic}", "Source": "{source}",
+        "CardID": "{fact_id}",
+    }},
+}
+
+_NOTE_TYPES_BY_MODEL = {
+    note_type.name: note_type
+    for note_type in (REFINED_BASIC, REFINED_CLOZE, REFINED_TYPED)
+}
+
+# Fact metadata read straight from optional CSV columns (validated by the
+# Fact contract, so a hand-edited value fails with a clear per-line error).
+_METADATA_COLUMNS = (
+    ("KnowledgeUnitID", "knowledge_unit_id"),
+    ("KnowledgeKind", "knowledge_kind"),
+    ("Origin", "origin"),
+)
+
+
+def row_to_fact(row: dict[str, str], deck: str) -> Fact:
+    """Convert one refined-CSV row into a validated Fact.
+
+    CardType ``cloze``/``typed`` map to the matching Fact types; every other
+    CardType (qa, reverse, image-supported, list, unknown) becomes ``qa``.
+    Raises CardValidationError on any malformed value; the caller adds the
+    CSV line number.
+    """
+    card_id = (row.get("CardID") or "").strip()
+    if not card_id:
+        raise CardValidationError("CardID is required")
+    annotations = {
+        "extra": row.get("Extra") or "",
+        "mnemonic": row.get("Mnemonic") or "",
+        "topic": row.get("Topic") or "",
+    }
+    card_type = (row.get("CardType") or "").strip()
+    if card_type == "cloze":
+        content = {"text": row.get("Front") or "", **annotations}
+    elif card_type == "typed":
+        content = {"prompt": row.get("Front") or "",
+                   "answer": row.get("Back") or "", **annotations}
+    else:
+        card_type = "qa"
+        content = {"front": row.get("Front") or "",
+                   "back": row.get("Back") or "", **annotations}
+
+    data: dict[str, object] = {
+        "type": card_type,
+        "content": content,
+        "deck": deck,
+        "id": card_id,
+        "tags": _augmented_tags(row, card_id),
+    }
+    if (row.get("Source") or "").strip():
+        data["source"] = row["Source"]
+    for column, key in _METADATA_COLUMNS:
+        if (row.get(column) or "").strip():
+            data[key] = row[column].strip()
+    for column, key in (("ObjectiveIDs", "objective_ids"),
+                        ("PrerequisiteIDs", "prerequisite_ids")):
+        values = (row.get(column) or "").split()
+        if values:
+            data[key] = values
+    confidence = (row.get("Confidence") or "").strip()
+    if confidence:
+        try:
+            data["confidence"] = float(confidence)
+        except ValueError:
+            raise CardValidationError(
+                f"Confidence must be a number between 0 and 1, got {confidence!r}"
+            ) from None
+    return Fact.from_dict(data)
+
+
+def _augmented_tags(row: dict[str, str], card_id: str) -> list[str]:
+    tags = [
+        *(row.get("Tags") or "").split(),
+        "refined",
+        "mnemo-refined",
+        f"mnemo-id-{card_id}",
+        *(
+            [f"mnemo-kind-{row['KnowledgeKind']}"]
+            if (row.get("KnowledgeKind") or "").strip()
+            else []
+        ),
+        *(
+            [f"mnemo-origin-{row['Origin']}"]
+            if (row.get("Origin") or "").strip()
+            else []
+        ),
+        *(f"mnemo-objective-{value}" for value in (row.get("ObjectiveIDs") or "").split()),
+    ]
+    return list(dict.fromkeys(tags))
+
+
+def _collect_local_image(
+    row: dict[str, str], base_dir: Path, media: dict[Path, None]
+) -> str:
+    """Register a CSV-local image for upload and return the field value."""
+    image_url = (row.get("ImageURL") or "").strip()
+    if image_url and "://" not in image_url:
+        image_path = base_dir / image_url
+        if not image_path.exists():
+            raise FileNotFoundError(image_path)
+        media[image_path] = None
+        # AnkiConnect stores media flat by basename, so the field must
+        # reference that basename rather than the CSV-relative path.
+        image_url = image_path.name
+    return image_url
+
+
+def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> None:
+    """Copy presentation-only CSV columns into the rendered note.
+
+    CardType, ImageURL, ImageAlt (and the cloze model's Back field) are
+    verbatim CSV passthroughs with no semantic Fact representation, so instead
+    of widening the Fact contract they are patched into the note that
+    ``adapt`` produced. No templating happens here — this is not a second
+    rendering path.
+    """
+    passthrough = {
+        "CardType": row.get("CardType") or "",
+        "ImageURL": image_url,
+        "ImageAlt": row.get("ImageAlt") or "",
+        "Back": row.get("Back") or "",
+    }
+    model_fields = _NOTE_TYPES_BY_MODEL[note.model].fields
+    for name, value in passthrough.items():
+        if name in model_fields and name not in note.fields:
+            note.fields[name] = value
+
+
 def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
     notes: list[AnkiNote] = []
     media: dict[Path, None] = {}
@@ -143,70 +297,14 @@ def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
         if missing:
             raise ValueError(f"CSV is missing required fields: {', '.join(missing)}")
         for line_number, row in enumerate(reader, start=2):
-            card_id = (row.get("CardID") or "").strip()
-            if not card_id:
-                raise ValueError(f"line {line_number}: CardID is required")
-            image_url = (row.get("ImageURL") or "").strip()
-            if image_url and "://" not in image_url:
-                image_path = csv_path.parent / image_url
-                if not image_path.exists():
-                    raise FileNotFoundError(image_path)
-                media[image_path] = None
-                # AnkiConnect stores media flat by basename, so the field must
-                # reference that basename rather than the CSV-relative path.
-                image_url = image_path.name
-            common = {
-                "Back": row.get("Back", ""),
-                "Extra": row.get("Extra", ""),
-                "Mnemonic": row.get("Mnemonic", ""),
-                "CardType": row.get("CardType", ""),
-                "Topic": row.get("Topic", ""),
-                "Source": row.get("Source", ""),
-                "ImageURL": image_url,
-                "ImageAlt": row.get("ImageAlt", ""),
-                "CardID": card_id,
-            }
-            card_type = row.get("CardType")
-            is_cloze = card_type == "cloze"
-            is_typed = card_type == "typed"
-            if is_typed:
-                fields = {
-                    "Prompt": row.get("Front", ""),
-                    "Answer": row.get("Back", ""),
-                    "Extra": common["Extra"],
-                    "Mnemonic": common["Mnemonic"],
-                    "CardType": common["CardType"],
-                    "Topic": common["Topic"],
-                    "Source": common["Source"],
-                    "CardID": common["CardID"],
-                }
-            else:
-                fields = ({"Text": row.get("Front", "") } | common) if is_cloze else ({"Front": row.get("Front", "")} | common)
-            tags = [
-                *(row.get("Tags") or "").split(),
-                "refined",
-                "mnemo-refined",
-                f"mnemo-id-{card_id}",
-                *(
-                    [f"mnemo-kind-{row['KnowledgeKind']}"]
-                    if (row.get("KnowledgeKind") or "").strip()
-                    else []
-                ),
-                *(
-                    [f"mnemo-origin-{row['Origin']}"]
-                    if (row.get("Origin") or "").strip()
-                    else []
-                ),
-                *(f"mnemo-objective-{value}" for value in (row.get("ObjectiveIDs") or "").split()),
-            ]
-            notes.append(
-                AnkiNote(
-                    model=TYPED_MODEL if is_typed else (CLOZE_MODEL if is_cloze else BASIC_MODEL),
-                    deck=deck,
-                    fields=fields,
-                    tags=list(dict.fromkeys(tags)),
-                )
-            )
+            try:
+                fact = row_to_fact(row, deck)
+            except CardValidationError as exc:
+                raise ValueError(f"line {line_number}: {exc}") from exc
+            image_url = _collect_local_image(row, csv_path.parent, media)
+            note = adapt(fact, mappings=REFINED_MAPPINGS)
+            _apply_passthrough(note, row, image_url)
+            notes.append(note)
     return notes, list(media)
 
 

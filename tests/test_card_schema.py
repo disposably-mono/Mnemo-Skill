@@ -270,6 +270,43 @@ def test_semantic_metadata_round_trip_is_backward_compatible():
     assert Fact.from_dict(src).to_dict() == src
 
 
+def test_optional_annotations_accepted_on_text_types():
+    contents = {
+        "qa": {"front": "Q?", "back": "A", "extra": "why it holds"},
+        "cloze": {"text": "a {{c1::b}} c"},
+        "list": {"title": "Steps", "items": ["one", "two"]},
+        "typed": {"prompt": "Type it", "answer": "answer"},
+    }
+    for fact_type, content in contents.items():
+        annotated = {**content, "mnemonic": "a memory hook", "topic": "Topic A"}
+        fact = Fact.from_dict(
+            {"type": fact_type, "content": annotated, "deck": "D", "tags": []}
+        )
+        assert fact.content["mnemonic"] == "a memory hook"
+        assert fact.content["topic"] == "Topic A"
+
+
+def test_optional_annotations_must_be_strings():
+    for key in ("extra", "mnemonic", "topic"):
+        with pytest.raises(CardValidationError, match=key):
+            Fact.from_dict({
+                "type": "qa",
+                "content": {"front": "Q?", "back": "A", key: 5},
+                "deck": "D",
+                "tags": [],
+            })
+
+
+def test_round_trip_unchanged_when_annotations_absent():
+    src = {
+        "type": "qa",
+        "content": {"front": "Q", "back": "A"},
+        "deck": "D",
+        "tags": [],
+    }
+    assert Fact.from_dict(src).to_dict() == src
+
+
 def test_generated_enrichment_requires_visible_label_and_source():
     base = {
         "type": "qa",

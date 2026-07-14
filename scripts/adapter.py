@@ -157,18 +157,27 @@ def _placeholders(
         "origin": fact.origin or "",
         "confidence": "" if fact.confidence is None else str(fact.confidence),
     }
+    # Optional per-card annotations shared by every type except image occlusion.
+    annotations = {
+        "mnemonic": content.get("mnemonic", ""),
+        "topic": content.get("topic", ""),
+    }
     if fact.type == "qa":
-        return {**common, "front": content["front"], "back": content["back"],
+        return {**common, **annotations, "front": content["front"],
+                "back": content["back"], "extra": content.get("extra", ""),
                 "distractors": _render_confusions(fact)}
     if fact.type == "cloze":
-        return {**common, "text": content["text"], "extra": content.get("extra", ""),
+        return {**common, **annotations, "text": content["text"],
+                "extra": content.get("extra", ""),
                 "distractors": _render_confusions(fact)}
     if fact.type == "list":
-        return {**common, "title": content["title"], "items": _render_list_items(fact),
+        return {**common, **annotations, "title": content["title"],
+                "items": _render_list_items(fact),
                 "extra": content.get("extra", "")}
     if fact.type == "typed":
         return {
             **common,
+            **annotations,
             "prompt": content["prompt"],
             "answer": content["answer"],
             "hints": _render_hints(content.get("hints", [])),

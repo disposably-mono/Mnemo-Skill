@@ -231,6 +231,8 @@ def _require_nonempty_str(content: dict[str, Any], key: str, kind: str) -> None:
 def _validate_qa(content: dict[str, Any]) -> None:
     _require_nonempty_str(content, "front", "qa")
     _require_nonempty_str(content, "back", "qa")
+    _validate_optional_str(content, "extra", "qa")
+    _validate_annotations(content, "qa")
 
 
 def _validate_cloze(content: dict[str, Any]) -> None:
@@ -242,6 +244,7 @@ def _validate_cloze(content: dict[str, Any]) -> None:
             "cloze content must contain a cloze deletion like {{c1::answer}}"
         )
     _validate_optional_str(content, "extra", "cloze")
+    _validate_annotations(content, "cloze")
 
 
 def _validate_list(content: dict[str, Any]) -> None:
@@ -255,6 +258,7 @@ def _validate_list(content: dict[str, Any]) -> None:
         if not isinstance(item, str) or not item.strip():
             raise CardValidationError("each list item must be a non-empty string")
     _validate_optional_str(content, "extra", "list")
+    _validate_annotations(content, "list")
 
 
 def _validate_typed(content: dict[str, Any]) -> None:
@@ -269,6 +273,7 @@ def _validate_typed(content: dict[str, Any]) -> None:
         if not isinstance(hint, str) or not hint.strip():
             raise CardValidationError("each typed hint must be a non-empty string")
     _validate_optional_str(content, "extra", "typed")
+    _validate_annotations(content, "typed")
 
 
 def _validate_image_occlusion(content: dict[str, Any]) -> None:
@@ -292,6 +297,12 @@ def _validate_image_occlusion(content: dict[str, Any]) -> None:
 def _validate_optional_str(content: dict[str, Any], key: str, kind: str) -> None:
     if key in content and not isinstance(content[key], str):
         raise CardValidationError(f"{kind} content {key!r} must be a string")
+
+
+def _validate_annotations(content: dict[str, Any], kind: str) -> None:
+    """Optional per-card annotations shared by qa/cloze/list/typed facts."""
+    for key in ("mnemonic", "topic"):
+        _validate_optional_str(content, key, kind)
 
 
 def _validate_occlusion_mask(mask: Any) -> None:

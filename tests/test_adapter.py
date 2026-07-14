@@ -133,6 +133,37 @@ def test_mapping_for_cloze_targets_stock_cloze():
     assert note.fields["Back Extra"] == "chemistry"
 
 
+def test_qa_mapping_exposes_extra_mnemonic_and_topic_placeholders():
+    mappings = {"qa": {"Rich": {
+        "Front": "{front}", "Back": "{back}", "Extra": "{extra}",
+        "Mnemonic": "{mnemonic}", "Topic": "{topic}",
+    }}}
+    fact = _qa(content={
+        "front": "Capital of Australia?", "back": "Canberra",
+        "extra": "Not Sydney.", "mnemonic": "Can-bear-a", "topic": "Capitals",
+    })
+    note = adapt(fact, mappings=mappings)
+    assert note.fields["Extra"] == "Not Sydney."
+    assert note.fields["Mnemonic"] == "Can-bear-a"
+    assert note.fields["Topic"] == "Capitals"
+
+
+def test_annotation_placeholders_default_to_empty_for_all_text_types():
+    cases = {
+        "qa": {"front": "Q?", "back": "A"},
+        "cloze": {"text": "a {{c1::b}}"},
+        "list": {"title": "T", "items": ["x", "y"]},
+        "typed": {"prompt": "P", "answer": "A"},
+    }
+    for fact_type, content in cases.items():
+        fact = Fact.from_dict(
+            {"type": fact_type, "content": content, "deck": "D", "tags": []}
+        )
+        mappings = {fact_type: {"Custom": {"F": "{mnemonic}|{topic}"}}}
+        note = adapt(fact, mappings=mappings)
+        assert note.fields["F"] == "|", fact_type
+
+
 def test_mapping_list_items_placeholder_renders_overlapping_cloze():
     mappings = {"list": {"Custom": {"Header": "{title}", "Body": "{items}"}}}
     fact = Fact.from_dict({

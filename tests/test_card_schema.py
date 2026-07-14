@@ -138,6 +138,14 @@ def test_cloze_without_marker_rejected():
         )
 
 
+def test_cloze_marker_inside_inline_code_is_rejected():
+    with pytest.raises(CardValidationError, match="cloze"):
+        Fact.from_dict(
+            {"type": "cloze", "content": {"text": "Use `{{c1::literal}}` as text."},
+             "deck": "D", "tags": []}
+        )
+
+
 def test_list_requires_at_least_two_items():
     with pytest.raises(CardValidationError, match="items"):
         Fact.from_dict(

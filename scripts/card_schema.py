@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.knowledge import KNOWLEDGE_KINDS, ORIGINS
+from scripts.verbatim import without_inline_verbatim
 
 FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list", "typed", "image_occlusion")
 GRADES: tuple[str, ...] = ("far", "medium", "near")
@@ -239,7 +240,7 @@ def _validate_cloze(content: dict[str, Any]) -> None:
     text = content.get("text")
     if not isinstance(text, str) or not text.strip():
         raise CardValidationError("cloze content requires non-empty 'text'")
-    if not _CLOZE_MARKER.search(text):
+    if not _CLOZE_MARKER.search(without_inline_verbatim(text)):
         raise CardValidationError(
             "cloze content must contain a cloze deletion like {{c1::answer}}"
         )

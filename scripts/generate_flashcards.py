@@ -42,6 +42,9 @@ from scripts.verbatim import (
     is_display_math_delimiter,
     is_fenced_code_closing,
     is_single_line_display_math,
+    protect_inline_verbatim,
+    restore_inline_verbatim,
+    without_inline_verbatim,
 )
 
 
@@ -220,8 +223,14 @@ def word_count(text: str) -> int:
 
 
 def strip_html_and_cloze(text: str) -> str:
+    text = without_inline_verbatim(text)
     text = _CLOZE.sub(lambda match: match.group(1), text)
     return re.sub(r"<[^>]+>", " ", text)
+
+
+def has_cloze(text: str) -> bool:
+    """Return whether text contains cloze markup outside inline verbatim spans."""
+    return bool(_CLOZE.search(without_inline_verbatim(text)))
 
 
 def slugify(value: str) -> str:
@@ -621,20 +630,21 @@ _ABBREVIATIONS = frozenset(
 
 def split_sentences(text: str) -> list[str]:
     """Split prose on sentence boundaries, skipping abbreviation periods."""
+    protected, spans = protect_inline_verbatim(text)
     parts: list[str] = []
     start = 0
-    for boundary in _FACT_BOUNDARY.finditer(text):
-        preceding = text[:boundary.start()].rstrip()
+    for boundary in _FACT_BOUNDARY.finditer(protected):
+        preceding = protected[:boundary.start()].rstrip()
         token = re.search(r"(\S+)[.!?]+$", preceding)
         last = token.group(1).lower() if token else ""
         # Skip splitting after known abbreviations or single-letter initials.
         if last in _ABBREVIATIONS or re.fullmatch(r"[a-z]", last):
             continue
-        segment = text[start:boundary.start()].strip()
+        segment = restore_inline_verbatim(protected[start:boundary.start()].strip(), spans)
         if segment:
             parts.append(segment)
         start = boundary.end()
-    tail = text[start:].strip()
+    tail = restore_inline_verbatim(protected[start:].strip(), spans)
     if tail:
         parts.append(tail)
     return parts
@@ -706,13 +716,13 @@ def protect_thousands_commas(text: str) -> str:
 def split_list_items(text: str) -> list[str]:
     if not text or not re.search(r"[,;]", text):
         return []
-    protected = protect_thousands_commas(text)
+    protected, spans = protect_inline_verbatim(protect_thousands_commas(text))
     if ";" in protected:
         items = [part.strip(" .") for part in protected.split(";") if part.strip(" .")]
     else:
         normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", protected, flags=re.IGNORECASE)
         items = [part.strip(" .") for part in normalized.split(",") if part.strip(" .")]
-    items = [item.replace("\x00", ",") for item in items]
+    items = [restore_inline_verbatim(item.replace("\x00", ","), spans) for item in items]
     if len(items) < 2 or any(word_count(item) > 12 for item in items):
         return []
     return items
@@ -736,18 +746,19 @@ def enumerated_components(text: str) -> list[str]:
 
 
 def split_independent_clauses(text: str) -> list[str]:
+    protected, spans = protect_inline_verbatim(text)
     if re.search(
         r"\b(?:but|whereas|while|however|therefore|because|evidence|claim|exception)\b",
-        text,
+        protected,
         re.IGNORECASE,
     ):
         return [text.strip()]
-    semicolon_parts = [part.strip(" .") for part in text.split(";") if part.strip(" .")]
+    semicolon_parts = [part.strip(" .") for part in protected.split(";") if part.strip(" .")]
     if len(semicolon_parts) > 1 and all(_VERB.search(part) for part in semicolon_parts):
-        return [part + "." for part in semicolon_parts]
-    parts = re.split(r"\s+and\s+", text, flags=re.IGNORECASE)
+        return [restore_inline_verbatim(part + ".", spans) for part in semicolon_parts]
+    parts = re.split(r"\s+and\s+", protected, flags=re.IGNORECASE)
     if len(parts) == 2 and all(word_count(part) >= 3 and _VERB.search(part) for part in parts):
-        return [part.strip(" .") + "." for part in parts]
+        return [restore_inline_verbatim(part.strip(" .") + ".", spans) for part in parts]
     return [text.strip()]
 
 
@@ -928,7 +939,7 @@ def is_generic_prompt(front: str) -> bool:
 
 
 def make_cloze(statement: str) -> str:
-    if _CLOZE.search(statement):
+    if has_cloze(statement):
         return statement
     definition = _DEFINITION.match(statement)
     if definition:
@@ -951,7 +962,7 @@ def make_cloze(statement: str) -> str:
 
 
 def answer_from_cloze(cloze: str) -> str:
-    answers = _CLOZE.findall(cloze)
+    answers = _CLOZE.findall(without_inline_verbatim(cloze))
     return "; ".join(answers) if answers else cloze
 
 
@@ -1100,9 +1111,9 @@ def validate_card(card: Card) -> list[Violation]:
         violations.append(error("MISSING_CONTEXT", "Technical card lacks a Context section.", card, "Add the prerequisite domain context."))
     if card.card_type not in CARD_TYPES:
         violations.append(error("INVALID_CARD_TYPE", f"Unknown card type {card.card_type!r}.", card, f"Use one of: {', '.join(CARD_TYPES)}."))
-    if card.card_type == "cloze" and not _CLOZE.search(card.front):
+    if card.card_type == "cloze" and not has_cloze(card.front):
         violations.append(error("CLOZE_FORMAT", "Cloze card does not contain Anki cloze syntax.", card, "Add one {{c1::answer}} deletion or change CardType."))
-    if card.card_type != "cloze" and _CLOZE.search(card.front):
+    if card.card_type != "cloze" and has_cloze(card.front):
         violations.append(error("TYPE_FORMAT_MISMATCH", f"{card.card_type} card contains cloze syntax.", card, "Render a direct prompt or set CardType to cloze."))
     if card.card_type == "reverse" and not card.front.startswith("Which term means:"):
         violations.append(error("REVERSE_FORMAT", "Reverse card is not a term-from-definition prompt.", card, "Render 'Which term means: <definition>?' or change CardType."))

@@ -9,6 +9,7 @@ from scripts.generate_flashcards import (
     build_cards,
     estimate_components,
     interleave_cards,
+    looks_compound,
     main,
     parse_content,
     plan_knowledge,
@@ -16,6 +17,7 @@ from scripts.generate_flashcards import (
     split_sentences,
     validate_card,
     validate_deck,
+    word_count,
 )
 from scripts.audit_cards import build_report
 from scripts.knowledge import extract_explicit_objectives
@@ -176,6 +178,31 @@ def test_parse_content_keeps_unterminated_verbatim_blocks_opaque():
     assert [(unit.text, unit.verbatim_kind) for unit in math_units] == [
         ("$$\nE = mc^2", "math")
     ]
+
+
+def test_inline_verbatim_spans_are_opaque_to_prose_splitting_and_counts():
+    math = "The gradient \\(\\nabla f = (f_x, f_y)\\) points uphill."
+
+    assert _texts(parse_content(math)) == [math]
+    assert _texts(parse_content("Call `f(x, y)` to double.")) == [
+        "Call `f(x, y)` to double."
+    ]
+    assert split_list_items("`f(x, y)`") == []
+    assert estimate_components("\\(\\nabla f = (f_x, f_y)\\)") == 1
+    assert word_count("The \\(\\nabla f = (f_x, f_y)\\) points uphill") == 3
+    assert not looks_compound("\\(a; b and c\\)")
+
+
+def test_validate_card_ignores_inline_verbatim_notation_and_literal_cloze_syntax():
+    math_card = make_card(back="\\(\\nabla f = (f_x, f_y)\\)")
+    literal_cloze_card = make_card(front="Use `{{c1::literal}}` as text.")
+
+    assert not {"COGNITIVE_LOAD", "ATOMICITY_REVIEW"} & {
+        violation.code for violation in validate_card(math_card)
+    }
+    assert "TYPE_FORMAT_MISMATCH" not in {
+        violation.code for violation in validate_card(literal_cloze_card)
+    }
 
 
 def test_estimate_components_ignores_thousands_separator_commas():

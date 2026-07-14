@@ -1,4 +1,5 @@
 import csv
+import json
 
 from scripts.audit_cards import build_report, main, print_report
 
@@ -171,3 +172,23 @@ def test_approval_log_cli_argument_preserves_passing_exit_code(tmp_path, capsys)
     capsys.readouterr()
 
     assert status_with_approval == status_without_approval == 0
+
+
+def test_coverage_sidecar_auto_discovered_next_to_deck_via_main(tmp_path, capsys):
+    deck = write_csv(tmp_path / "deck.csv", CARD_FIELDS, [card_row()])
+    coverage_sidecar = tmp_path / "deck.coverage.json"
+    coverage_sidecar.write_text(
+        json.dumps(
+            {
+                "objectives": [{"id": "obj1", "status": "covered"}],
+                "summary": {"covered_objectives": 1, "objectives": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main([str(deck), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+
+    assert report["coverage"]["summary"]["covered_objectives"] == 1
+    assert report["coverage"]["objectives"][0]["status"] == "covered"

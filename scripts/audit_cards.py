@@ -290,11 +290,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if settings is None:
         candidate = args.deck.with_suffix(".settings.json")
         settings = candidate if candidate.exists() else None
-    coverage = args.coverage
-    if coverage is None:
-        candidate = args.deck.with_suffix(".coverage.json")
-        coverage = candidate if candidate.exists() else None
-    report = build_report(args.deck, settings, args.retention_log, coverage, args.approval_log)
+    report = build_report(
+        args.deck,
+        settings,
+        args.retention_log,
+        args.coverage,
+        args.approval_log,
+    )
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:

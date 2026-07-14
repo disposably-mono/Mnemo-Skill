@@ -50,7 +50,7 @@ source (pdf / md / pptx)
   -> plan          objectives + KnowledgeUnit manifest
   -> generate      Fact[] incl. graded distractors  (Claude, guided by SKILL.md)
   -> cover         represented / deferred / unsupported / omitted objectives
-  -> review gate   you edit/approve cards/<session>.md
+  -> review gate   you edit/approve cards/<session>.csv (Fact JSONL contract)
   -> adapt         Fact -> {model, fields}  (mappings.toml)
   -> import        AnkiConnect (live)  or  genanki .apkg (fallback)
   -> sync          AnkiWeb -> phone (AnkiDroid / AnkiMobile)

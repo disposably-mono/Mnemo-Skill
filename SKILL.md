@@ -1,6 +1,6 @@
 ---
 name: mnemo
-description: Generate, audit, and import source-grounded, recall-first Anki study decks from Markdown, text, Q&A, PDFs, or lecture slides. Use when Codex needs to model learning objectives and knowledge structures, create concise cards for facts, comparisons, processes, arguments, narratives, formulas, examples, exceptions, diagrams, or applications, validate coverage and card quality, or analyze mature-card retention.
+description: Generate, audit, and import source-grounded, recall-first Anki study decks from Markdown, text, Q&A, PDFs, or lecture slides. Use when Claude needs to model learning objectives and knowledge structures, create concise cards for facts, comparisons, processes, arguments, narratives, formulas, examples, exceptions, diagrams, or applications, validate coverage and card quality, or analyze mature-card retention.
 ---
 
 # Mnemo
@@ -251,7 +251,7 @@ fallback and native image-occlusion limitations remain unchanged.
 
 ## Skill Architecture
 
-Keep only `name` and `description` in YAML frontmatter for Codex skill triggering.
+Keep only `name` and `description` in YAML frontmatter for Claude skill triggering.
 Keep workflow and invariants in this file. Keep research detail and citations in
 `references/`. Keep deterministic operations in `scripts/`. Keep reusable output
 resources in `assets/` only when an actual template or media asset is required.

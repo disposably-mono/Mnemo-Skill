@@ -3,7 +3,7 @@
 Loads approved Facts from a JSONL file (the review-gate output), adapts each into
 a note for its configured target type, then imports them — live via AnkiConnect
 when Anki desktop is reachable, otherwise by writing a ``.apkg`` the user
-imports by hand. This is the script ``SKILL.md`` step 5 runs:
+imports by hand. This is the script ``SKILL.md`` step 9 runs:
 
     python scripts/import_cards.py cards/<session>.jsonl [--sync]
 """

@@ -12,15 +12,11 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_URL = "http://localhost:8765"
+# The canonical fact-type -> default-note-type registry lives in the adapter;
+# config aliases it so the two layers can never drift apart.
+from scripts.adapter import _DEFAULT_MODELS as _DEFAULT_TARGETS
 
-_DEFAULT_TARGETS = {
-    "qa": "MONO Basic",
-    "cloze": "MONO Cloze",
-    "list": "MONO Overlapping",
-    "typed": "MONO Type",
-    "image_occlusion": "Image Occlusion",
-}
+DEFAULT_URL = "http://localhost:8765"
 
 
 class ConfigError(ValueError):

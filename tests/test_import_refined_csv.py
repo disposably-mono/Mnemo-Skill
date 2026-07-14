@@ -92,6 +92,48 @@ def test_refined_csv_rejects_missing_fields_ids_and_media(tmp_path):
         load_notes(path, "Deck")
 
 
+def test_local_image_field_rewritten_to_stored_basename(tmp_path):
+    # BUG 4: ImageURL holds the CSV-relative path, but AnkiConnect stores
+    # media flat by basename — the note field must be rewritten to match
+    # what actually ends up in the Anki media folder.
+    img_dir = tmp_path / "images"
+    img_dir.mkdir()
+    image = img_dir / "diagram.png"
+    image.write_bytes(b"png")
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+        "ImageURL": "images/diagram.png", "ImageAlt": "a diagram",
+    }])
+
+    notes, media = load_notes(path, "Deck")
+
+    assert media == [image]
+    assert notes[0].fields["ImageURL"] == "diagram.png"
+    assert notes[0].fields["ImageAlt"] == "a diagram"
+
+
+def test_remote_image_url_left_unchanged(tmp_path):
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+        "ImageURL": "https://example.com/diagram.png", "ImageAlt": "a diagram",
+    }])
+
+    notes, media = load_notes(path, "Deck")
+
+    assert media == []
+    assert notes[0].fields["ImageURL"] == "https://example.com/diagram.png"
+
+
+def test_refined_basic_and_cloze_templates_render_the_image():
+    for note_type in (REFINED_BASIC, REFINED_CLOZE):
+        afmt = note_type.templates[0].afmt
+        assert "{{ImageURL}}" in afmt, note_type.name
+        assert "{{ImageAlt}}" in afmt, note_type.name
+        assert "{{#ImageURL}}" in afmt, note_type.name
+
+
 class FakeResult:
     added = [100]
     skipped = 0

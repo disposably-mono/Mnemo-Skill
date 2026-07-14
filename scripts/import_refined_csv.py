@@ -32,6 +32,12 @@ _DETAILS = """
 {{#CardID}}<div class="source">ID: {{CardID}}</div>{{/CardID}}
 """
 
+# Image-supported recall: the image renders on the answer side only, so
+# text-only cards (no ImageURL) are visually unaffected.
+_IMAGE_BLOCK = (
+    '{{#ImageURL}}<div class="refined-image"><img src="{{ImageURL}}" alt="{{ImageAlt}}"></div>{{/ImageURL}}'
+)
+
 REFINED_CSS = MONO_CSS + """
 .refined-block {
   margin-top: 18px;
@@ -42,6 +48,8 @@ REFINED_CSS = MONO_CSS + """
   font-size: 16px;
 }
 .refined-block.mnemonic { border-left-color: var(--highlight); }
+.refined-image { margin-top: 18px; }
+.refined-image img { max-width: 100%; border-radius: var(--radius-md); display: block; }
 """
 
 REFINED_BASIC = NoteType(
@@ -59,7 +67,7 @@ REFINED_BASIC = NoteType(
             ),
             afmt=(
                 '{{FrontSide}}<hr id="answer">'
-                '<div class="mono-a">{{Back}}</div>' + _DETAILS
+                '<div class="mono-a">{{Back}}</div>' + _IMAGE_BLOCK + _DETAILS
             ),
         ),
     ),
@@ -82,7 +90,8 @@ REFINED_CLOZE = NoteType(
             afmt=(
                 '<div class="mono-label">cloze</div>'
                 '<div class="mono-a">{{cloze:Text}}</div>'
-                '<hr id="answer"><div class="mono-a">{{Back}}</div>' + _DETAILS
+                '<hr id="answer"><div class="mono-a">{{Back}}</div>'
+                + _IMAGE_BLOCK + _DETAILS
             ),
         ),
     ),
@@ -143,6 +152,9 @@ def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
                 if not image_path.exists():
                     raise FileNotFoundError(image_path)
                 media[image_path] = None
+                # AnkiConnect stores media flat by basename, so the field must
+                # reference that basename rather than the CSV-relative path.
+                image_url = image_path.name
             common = {
                 "Back": row.get("Back", ""),
                 "Extra": row.get("Extra", ""),

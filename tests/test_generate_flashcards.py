@@ -485,3 +485,36 @@ def test_image_html_attributes_are_escaped():
 
     assert "a.png?x=1&amp;y=2" in card.back
     assert "&quot;labeled&quot;" in card.back
+
+
+def test_cli_with_no_interleave_produces_config_with_interleave_topics_false(tmp_path):
+    source = tmp_path / "notes.md"
+    output = tmp_path / "deck.csv"
+    source.write_text(PASSING_NOTES, encoding="utf-8")
+
+    assert main([str(source), "--output", str(output), "--no-interleave"]) == 0
+
+    settings = json.loads(output.with_suffix(".settings.json").read_text())
+    assert settings["interleave_topics"] is False
+
+
+def test_cli_default_keeps_interleave_topics_true(tmp_path):
+    source = tmp_path / "notes.md"
+    output = tmp_path / "deck.csv"
+    source.write_text(PASSING_NOTES, encoding="utf-8")
+
+    assert main([str(source), "--output", str(output)]) == 0
+
+    settings = json.loads(output.with_suffix(".settings.json").read_text())
+    assert settings["interleave_topics"] is True
+
+
+def test_cli_with_interleave_flag_explicitly_enables_interleave_topics(tmp_path):
+    source = tmp_path / "notes.md"
+    output = tmp_path / "deck.csv"
+    source.write_text(PASSING_NOTES, encoding="utf-8")
+
+    assert main([str(source), "--output", str(output), "--interleave"]) == 0
+
+    settings = json.loads(output.with_suffix(".settings.json").read_text())
+    assert settings["interleave_topics"] is True

@@ -1164,6 +1164,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-ease", type=int, default=250)
     parser.add_argument("--new-cards-per-day", type=int, default=20)
     parser.add_argument("--scheduler", choices=("legacy-sm2", "fsrs"), default="legacy-sm2")
+    parser.add_argument(
+        "--interleave",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Interleave cards across topics.",
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--retention-log", type=Path, help="Optional review CSV for the >21-day retention hook.")
     parser.add_argument("--allow-violations", action="store_true", help="Exit zero even when rubric errors remain.")
@@ -1183,6 +1189,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_ease_percent=args.max_ease,
         new_cards_per_day=args.new_cards_per_day,
         scheduler=args.scheduler,
+        interleave_topics=args.interleave,
         seed=args.seed,
     )
     source_text = args.input.read_text(encoding="utf-8")

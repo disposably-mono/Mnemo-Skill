@@ -91,8 +91,10 @@ def load_config(path: Path | None) -> tuple[GenerationConfig, list[Violation]]:
                 action="Pass --settings deck.settings.json to verify scheduler settings.",
             )
         ]
-    data = json.loads(path.read_text(encoding="utf-8"))
     try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"expected a JSON object, got {type(data).__name__}")
         return GenerationConfig(
             learning_steps=tuple(data.get("learning_steps", ("10m", "1d"))),
             graduating_interval_days=int(data.get("graduating_interval_days", 3)),
@@ -105,7 +107,7 @@ def load_config(path: Path | None) -> tuple[GenerationConfig, list[Violation]]:
             interleave_topics=bool(data.get("interleave_topics", True)),
             seed=int(data.get("seed", 42)),
         ), []
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, json.JSONDecodeError, AttributeError) as exc:
         return GenerationConfig(), [
             Violation(
                 "error",

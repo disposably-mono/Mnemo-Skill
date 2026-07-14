@@ -135,6 +135,26 @@ def test_non_numeric_confidence_produces_csv_row_violation_without_crashing(tmp_
     )
 
 
+def test_malformed_json_settings_sidecar_returns_settings_invalid(tmp_path):
+    deck = write_csv(tmp_path / "deck.csv", CARD_FIELDS, [card_row()])
+    settings_path = tmp_path / "deck.settings.json"
+    settings_path.write_text("{not json", encoding="utf-8")
+
+    report = build_report(deck, settings_path)
+
+    assert any(violation["code"] == "SETTINGS_INVALID" for violation in report["violations"])
+
+
+def test_non_object_settings_sidecar_returns_settings_invalid(tmp_path):
+    deck = write_csv(tmp_path / "deck.csv", CARD_FIELDS, [card_row()])
+    settings_path = tmp_path / "deck.settings.json"
+    settings_path.write_text('["10m"]', encoding="utf-8")
+
+    report = build_report(deck, settings_path)
+
+    assert any(violation["code"] == "SETTINGS_INVALID" for violation in report["violations"])
+
+
 def test_approval_log_cli_argument_preserves_passing_exit_code(tmp_path, capsys):
     deck = write_csv(tmp_path / "deck.csv", CARD_FIELDS, [card_row()])
     approval_log = write_csv(

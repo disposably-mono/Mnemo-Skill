@@ -60,10 +60,19 @@ def model_for(note_type: NoteType) -> genanki.Model:
 
 
 def to_genanki_note(note: AnkiNote, note_type: NoteType) -> genanki.Note:
-    """Render an AnkiNote into a genanki Note with fields in note-type order."""
+    """Render an AnkiNote into a genanki Note with fields in note-type order.
+
+    Notes that carry a stable ``CardID`` get a guid derived from it, so
+    re-exporting an edited note updates the existing Anki note on import
+    instead of creating a duplicate (genanki's default guid is derived from
+    all field values, so any edit would otherwise change it). Notes without a
+    ``CardID`` fall back to genanki's default guid behavior.
+    """
     model = model_for(note_type)
     fields = [note.fields.get(name, "") for name in note_type.fields]
-    return genanki.Note(model=model, fields=fields, tags=list(note.tags))
+    card_id = note.fields.get("CardID") or ""
+    guid = genanki.guid_for(note.model, card_id) if card_id else None
+    return genanki.Note(model=model, fields=fields, tags=list(note.tags), guid=guid)
 
 
 def export_apkg(

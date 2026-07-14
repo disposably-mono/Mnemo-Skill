@@ -17,6 +17,7 @@ from scripts.genanki_export import (
     stable_id,
     to_genanki_note,
 )
+from scripts.import_refined_csv import REFINED_BASIC
 from scripts.note_types import MONO_BASIC, MONO_CLOZE
 
 
@@ -46,6 +47,35 @@ def test_to_genanki_note_orders_fields_per_note_type():
     # genanki.Note.fields is a positional list matching the model field order.
     assert note.fields == ["Capital of Australia?", "Canberra", "", "atlas.md"]
     assert note.tags == ["geo", "auto"]
+
+
+def test_to_genanki_note_reuses_guid_when_only_body_changes_for_card_id_notes():
+    # BUG 5: re-exporting an edited note that carries a stable CardID must
+    # update the existing Anki note on import, not create a duplicate — so
+    # the guid must stay the same even though a field value changed.
+    fields_v1 = {
+        "Front": "Q", "Back": "A1", "Extra": "", "Mnemonic": "", "CardType": "qa",
+        "Topic": "", "Source": "", "ImageURL": "", "ImageAlt": "", "CardID": "abc-1",
+    }
+    note_v1 = _basic_note(model="MONO Refined", fields=fields_v1)
+    note_v2 = _basic_note(model="MONO Refined", fields={**fields_v1, "Back": "A2 (edited)"})
+
+    guid_v1 = to_genanki_note(note_v1, REFINED_BASIC).guid
+    guid_v2 = to_genanki_note(note_v2, REFINED_BASIC).guid
+
+    assert guid_v1 == guid_v2
+
+
+def test_to_genanki_note_without_card_id_keeps_default_guid_behavior():
+    # Notes with no stable CardID fall back to genanki's default guid, which
+    # is derived from all field values (and therefore changes with them).
+    note_v1 = _basic_note()
+    note_v2 = _basic_note(fields={**note_v1.fields, "Back": "Somewhere else"})
+
+    guid_v1 = to_genanki_note(note_v1, MONO_BASIC).guid
+    guid_v2 = to_genanki_note(note_v2, MONO_BASIC).guid
+
+    assert guid_v1 != guid_v2
 
 
 def test_export_writes_valid_apkg(tmp_path):

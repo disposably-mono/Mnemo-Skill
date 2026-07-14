@@ -194,8 +194,56 @@ def test_store_media_file_sends_base64(tmp_path):
         sent.update(payload["params"])
         return payload["params"]["filename"]
 
-    _register({"storeMediaFile": store})
+    _register({
+        "retrieveMediaFile": False,
+        "storeMediaFile": store,
+    })
     result = AnkiConnect(URL).store_media_file(media)
 
     assert result == "diagram.png"
     assert sent["data"] == base64.b64encode(b"png bytes").decode("ascii")
+
+
+@responses.activate
+def test_store_media_file_no_collision_with_new_file(tmp_path):
+    media = tmp_path / "diagram.png"
+    media.write_bytes(b"png bytes")
+
+    def store(payload):
+        return payload["params"]["filename"]
+
+    _register({
+        "retrieveMediaFile": False,
+        "storeMediaFile": store,
+    })
+
+    assert AnkiConnect(URL).store_media_file(media) == "diagram.png"
+
+
+@responses.activate
+def test_store_media_file_identical_content_is_noop(tmp_path):
+    media = tmp_path / "diagram.png"
+    file_bytes = b"png bytes"
+    media.write_bytes(file_bytes)
+    file_b64 = base64.b64encode(file_bytes).decode("ascii")
+
+    _register({
+        "retrieveMediaFile": file_b64,
+    })
+
+    assert AnkiConnect(URL).store_media_file(media) == "diagram.png"
+
+
+@responses.activate
+def test_store_media_file_different_content_raises(tmp_path):
+    media = tmp_path / "diagram.png"
+    media.write_bytes(b"png bytes")
+    existing_b64 = base64.b64encode(b"different content").decode("ascii")
+
+    _register({
+        "retrieveMediaFile": existing_b64,
+        "storeMediaFile": lambda payload: payload["params"]["filename"],
+    })
+
+    with pytest.raises(AnkiConnectError, match="diagram.png"):
+        AnkiConnect(URL).store_media_file(media)

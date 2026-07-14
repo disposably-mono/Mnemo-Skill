@@ -134,9 +134,24 @@ class AnkiConnect:
     # --- media --------------------------------------------------------------
 
     def store_media_file(self, path: str | Path) -> str:
-        """Copy one local file into Anki's collection media directory."""
+        """Copy one local file into Anki's collection media directory.
+
+        Before storing, checks if a file with the same basename already exists
+        in the collection. If it does and contains different content, raises
+        AnkiConnectError to prevent silent overwrites. If the content is identical,
+        silently returns without re-uploading.
+        """
         path = Path(path)
         data = base64.b64encode(path.read_bytes()).decode("ascii")
+        existing = self._invoke("retrieveMediaFile", filename=path.name)
+        if existing == data:
+            return path.name
+        if existing and existing != data:
+            raise AnkiConnectError(
+                f"collection already contains a different file named {path.name!r}; "
+                f"storing would overwrite it. Please rename the file or remove the "
+                f"existing collection media."
+            )
         return str(self._invoke("storeMediaFile", filename=path.name, data=data))
 
     def store_media_files(self, paths: Iterable[Path]) -> list[str]:

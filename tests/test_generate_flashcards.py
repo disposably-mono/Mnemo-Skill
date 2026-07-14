@@ -18,6 +18,43 @@ from scripts.generate_flashcards import (
     validate_deck,
 )
 from scripts.audit_cards import build_report
+from scripts.knowledge import extract_explicit_objectives
+
+
+def _texts(units):
+    return [unit.text for unit in units]
+
+
+def test_you_can_prose_becomes_a_unit_instead_of_being_dropped():
+    source = "You can compute variance as E[X^2] minus the square of E[X].\n"
+    units = parse_content(source, "stats.md")
+    assert any("variance" in text for text in _texts(units))
+    assert not extract_explicit_objectives(source, "stats.md")
+
+
+def test_students_can_declarative_content_is_not_an_objective():
+    source = "Students can develop antibodies after infection.\n"
+    units = parse_content(source, "bio.md")
+    assert any("antibodies" in text for text in _texts(units))
+    assert not extract_explicit_objectives(source, "bio.md")
+
+
+def test_should_be_able_to_remains_an_objective_and_is_not_carded():
+    source = "You should be able to derive the quadratic formula.\n"
+    units = parse_content(source, "algebra.md")
+    assert not any("quadratic" in text for text in _texts(units))
+    objectives = extract_explicit_objectives(source, "algebra.md")
+    assert len(objectives) == 1
+    assert "derive the quadratic formula" in objectives[0].label
+
+
+def test_bare_can_under_objectives_header_stays_an_objective():
+    source = "Objectives:\nYou can identify the three phases of mitosis.\n"
+    units = parse_content(source, "cell.md")
+    assert not any("mitosis" in text for text in _texts(units))
+    objectives = extract_explicit_objectives(source, "cell.md")
+    assert len(objectives) == 1
+    assert "identify the three phases of mitosis" in objectives[0].label
 
 
 def make_card(**changes):

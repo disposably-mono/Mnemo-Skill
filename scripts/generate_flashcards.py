@@ -34,6 +34,7 @@ from scripts.knowledge import (
     classify_knowledge,
     extract_explicit_objectives,
     infer_topic_objectives,
+    objective_label,
     stable_id,
 )
 
@@ -74,11 +75,6 @@ _ANSWER_LINE = re.compile(r"^(?:A(?:nswer)?):\s*(.+)$", re.IGNORECASE)
 _EXTRA_LINE = re.compile(r"^Extra:\s*(.+)$", re.IGNORECASE)
 _TOPIC_LINE = re.compile(r"^Topic:\s*(.+)$", re.IGNORECASE)
 _TAGS_LINE = re.compile(r"^Tags?:\s*(.+)$", re.IGNORECASE)
-_OBJECTIVE_LINE = re.compile(
-    r"^(?:(?:learning\s+)?objectives?\s*:|"
-    r"(?:students?|learners?|you) (?:should be able to|will be able to|can)\s+)",
-    re.IGNORECASE,
-)
 _OBJECTIVE_HEADER = re.compile(r"^(?:learning\s+)?objectives?\s*:\s*$", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*(?:[-*+] |\d+[.)]\s+)(.+)$")
 _CLOZE = re.compile(r"\{\{c\d+::(.*?)(?:::[^}]*)?\}\}")
@@ -293,7 +289,7 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
             index += 1
             continue
 
-        if _OBJECTIVE_LINE.match(line) or (objective_block and _BULLET.match(raw)):
+        if objective_label(line, raw, in_block=objective_block) is not None:
             flush_paragraph(line_number)
             index += 1
             continue

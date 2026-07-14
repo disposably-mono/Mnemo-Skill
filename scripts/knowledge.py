@@ -51,12 +51,46 @@ _OBJECTIVE = re.compile(
 )
 _OBJECTIVE_HEADER = re.compile(r"^(?:learning\s+)?objectives?\s*:\s*$", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*(?:[-*+] |\d+[.)]\s+)(?P<label>.+)$")
-_OUTCOME = re.compile(
-    r"^(?:by the end of (?:this )?(?:lesson|lecture|chapter),?\s*)?"
-    r"(?:students?|learners?|you) (?:should be able to|will be able to|can)\s+"
-    r"(?P<label>.+)$",
+# Strong objective framing, recognized anywhere in the source: Bloom's-style
+# "should/will be able to", or an explicit "by the end of this lesson ..."
+# outcome (which stays an objective even when phrased with a bare "can").
+_OUTCOME_STRONG = re.compile(
+    r"^(?:by the end of (?:this )?(?:lesson|lecture|chapter),?\s*"
+    r"(?:students?|learners?|you) (?:should be able to|will be able to|can)"
+    r"|(?:students?|learners?|you) (?:should be able to|will be able to))"
+    r"\s+(?P<label>.+)$",
     re.IGNORECASE,
 )
+# Weak framing: a bare "you can <verb>" is an objective only inside an explicit
+# objectives block. In body prose it is ordinary content ("You can compute
+# variance as ...") that must become a card, not be silently dropped.
+_OUTCOME_CAN = re.compile(
+    r"^(?:students?|learners?|you) can\s+(?P<label>.+)$",
+    re.IGNORECASE,
+)
+
+
+def objective_label(line: str, raw: str, *, in_block: bool) -> str | None:
+    """Return the learning-objective label a line states, or None if it is content.
+
+    Strong framing (``Objectives:``, ``should/will be able to``, an explicit
+    ``by the end of this lesson ...`` outcome) is recognized anywhere. A bare
+    ``you can ...`` counts as an objective only when ``in_block`` (under an
+    ``Objectives:`` header), so declarative ``You can compute ...`` prose is
+    left to become a card. ``line`` is the stripped text; ``raw`` preserves
+    leading whitespace so bullet markers still match inside a block.
+    """
+    match = _OBJECTIVE.match(line) or _OUTCOME_STRONG.match(line)
+    if match:
+        return match.group("label").strip(" .")
+    if in_block:
+        bullet = _BULLET.match(raw)
+        if bullet:
+            return bullet.group("label").strip(" .")
+        weak = _OUTCOME_CAN.match(line)
+        if weak:
+            return weak.group("label").strip(" .")
+    return None
 
 
 class KnowledgeValidationError(ValueError):
@@ -181,13 +215,10 @@ def extract_explicit_objectives(text: str, source_name: str) -> list[LearningObj
         if _OBJECTIVE_HEADER.match(line):
             objective_block = True
             continue
-        match = _OBJECTIVE.match(line) or _OUTCOME.match(line)
-        if not match and objective_block:
-            match = _BULLET.match(raw)
-        if not match:
+        label = objective_label(line, raw, in_block=objective_block)
+        if label is None:
             objective_block = False
             continue
-        label = match.group("label").strip(" .")
         source = f"{source_name}:line-{line_number}"
         objectives.append(
             LearningObjective(

@@ -599,14 +599,26 @@ def clone_unit(unit: SourceUnit, **changes: object) -> SourceUnit:
     return SourceUnit(**values)
 
 
+# A comma is a thousands separator, not an enumeration delimiter, when it sits
+# between digits at a group boundary (e.g. "300,000" or "1,234,567,890,123").
+# Protect those commas before splitting so numeric answers survive intact.
+_THOUSANDS_COMMA = re.compile(r"(?<=\d),(?=\d{3}\b)")
+
+
+def protect_thousands_commas(text: str) -> str:
+    return _THOUSANDS_COMMA.sub("\x00", text)
+
+
 def split_list_items(text: str) -> list[str]:
     if not text or not re.search(r"[,;]", text):
         return []
-    if ";" in text:
-        items = [part.strip(" .") for part in text.split(";") if part.strip(" .")]
+    protected = protect_thousands_commas(text)
+    if ";" in protected:
+        items = [part.strip(" .") for part in protected.split(";") if part.strip(" .")]
     else:
-        normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", text, flags=re.IGNORECASE)
+        normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", protected, flags=re.IGNORECASE)
         items = [part.strip(" .") for part in normalized.split(",") if part.strip(" .")]
+    items = [item.replace("\x00", ",") for item in items]
     if len(items) < 2 or any(word_count(item) > 12 for item in items):
         return []
     return items
@@ -1020,7 +1032,7 @@ def validate_card(card: Card) -> list[Violation]:
 
 
 def estimate_components(text: str) -> int:
-    clean = strip_html_and_cloze(text)
+    clean = protect_thousands_commas(strip_html_and_cloze(text))
     if not re.search(r"[,;]", clean):
         return 1
     return max(1, len([part for part in re.split(r"[,;]", clean) if part.strip()]))

@@ -7,10 +7,12 @@ from scripts.generate_flashcards import (
     analyze_retention,
     atomic_units,
     build_cards,
+    estimate_components,
     interleave_cards,
     main,
     parse_content,
     plan_knowledge,
+    split_list_items,
     split_sentences,
     validate_card,
     validate_deck,
@@ -54,6 +56,49 @@ def test_parse_and_split_enumeration_with_mnemonic():
     cards = build_cards(units)
     assert all(card.mnemonic == "RBY: red, blue, yellow" for card in cards)
     assert all(len(card.front.split()) < 20 for card in cards)
+
+
+def test_numeric_answer_with_thousands_separators_is_not_split():
+    units = parse_content(
+        "Q: How many cells are estimated to die each day in an adult human?\n"
+        "A: 300,000"
+    )
+
+    assert len(units) == 1
+    assert units[0].answer == "300,000"
+    cards = build_cards(units)
+    assert len(cards) == 1
+    assert "300,000" in cards[0].back
+    assert "component" not in cards[0].front.lower()
+
+
+def test_split_list_items_ignores_thousands_separator_commas():
+    assert split_list_items("300,000") == []
+    assert split_list_items("1,234,567,890,123") == []
+
+
+def test_split_list_items_still_splits_genuine_enumerations():
+    assert split_list_items("insulin, glucagon, and somatostatin") == [
+        "insulin",
+        "glucagon",
+        "somatostatin",
+    ]
+    assert split_list_items("1, 2, 3") == ["1", "2", "3"]
+
+
+def test_estimate_components_ignores_thousands_separator_commas():
+    assert estimate_components("1,234,567,890,123") == 1
+
+
+def test_real_three_item_list_still_splits_and_demands_mnemonic():
+    units = parse_content("The primary colors include red, blue, and yellow.")
+
+    assert [unit.answer for unit in units] == ["red", "blue", "yellow"]
+    cards = build_cards(units)
+    assert all(card.mnemonic for card in cards)
+
+    card = make_card(back="insulin, glucagon, and somatostatin", mnemonic="")
+    assert any(violation.code == "MISSING_MNEMONIC" for violation in validate_card(card))
 
 
 def test_semicolon_lists_preserve_internal_conjunctions():

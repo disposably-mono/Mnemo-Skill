@@ -14,6 +14,7 @@ from mnemo.pipeline.generate_flashcards import (
     looks_compound,
     main,
     parse_content,
+    parse_steps,
     plan_knowledge,
     split_list_items,
     split_sentences,
@@ -125,6 +126,11 @@ def test_split_list_items_still_splits_genuine_enumerations():
         "somatostatin",
     ]
     assert split_list_items("1, 2, 3") == ["1", "2", "3"]
+
+
+def test_parse_steps_accepts_space_or_comma_separated_learning_steps():
+    assert parse_steps("10m 1d") == ("10m", "1d")
+    assert parse_steps("10m,1d") == ("10m", "1d")
 
 
 def test_parse_content_preserves_fenced_code_as_one_verbatim_unit():

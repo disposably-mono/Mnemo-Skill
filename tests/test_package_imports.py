@@ -16,6 +16,12 @@ def test_package_exposes_version():
     assert mnemo.__version__ == "0.0.1"
 
 
+def test_generate_flashcards_facade_stays_under_file_size_limit():
+    facade = _PACKAGE_ROOT / "pipeline" / "generate_flashcards.py"
+
+    assert sum(1 for _ in facade.open(encoding="utf-8")) <= 800
+
+
 def test_console_scripts_are_declared():
     scripts = {
         entry_point.name

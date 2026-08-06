@@ -19,10 +19,10 @@ from typing import Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.adapter import AnkiNote, Mappings, adapt
-from scripts.anki_connect import AnkiConnect, AnkiConnectError
+from mnemo.anki.adapter import AnkiNote, Mappings, adapt
+from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
 from mnemo.core.card_schema import CardValidationError, Fact
-from scripts.note_types import CardTemplate, MONO_CSS, NoteType
+from mnemo.anki.note_types import CardTemplate, MONO_CSS, NoteType
 
 
 BASIC_MODEL = "MONO Refined"

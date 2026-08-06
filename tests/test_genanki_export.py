@@ -10,15 +10,15 @@ import json
 
 import pytest
 
-from scripts.adapter import AnkiNote
-from scripts.genanki_export import (
+from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.genanki_export import (
     ExportResult,
     export_apkg,
     stable_id,
     to_genanki_note,
 )
 from scripts.import_refined_csv import REFINED_BASIC
-from scripts.note_types import MONO_BASIC, MONO_CLOZE
+from mnemo.anki.note_types import MONO_BASIC, MONO_CLOZE
 
 
 def _basic_note(**over):
@@ -113,7 +113,7 @@ def test_export_handles_cloze_note_type(tmp_path):
     result = export_apkg([cloze], tmp_path / "c.apkg")
     assert result.count == 1
     # Sanity: the cloze model is wired as a genanki CLOZE model.
-    from scripts.genanki_export import model_for
+    from mnemo.anki.genanki_export import model_for
     import genanki
     assert model_for(MONO_CLOZE).model_type == genanki.Model.CLOZE
 

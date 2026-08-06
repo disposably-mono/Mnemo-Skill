@@ -1,6 +1,6 @@
 """Tests for the MONO reference note types (scripts/note_types.py)."""
 
-from scripts.note_types import (
+from mnemo.anki.note_types import (
     MONO_BASIC,
     MONO_CLOZE,
     MONO_CODE,

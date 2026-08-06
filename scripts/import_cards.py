@@ -21,13 +21,13 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.adapter import AnkiNote, MappingError, Mappings, adapt, load_mappings
-from scripts.anki_connect import AnkiConnect, AnkiConnectError
+from mnemo.anki.adapter import AnkiNote, MappingError, Mappings, adapt, load_mappings
+from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
 from mnemo.core.card_schema import CardValidationError, load_facts
 from mnemo.core.config import ConfigError, load_config
-from scripts.genanki_export import export_apkg
-from scripts.media import bundled_font_paths, unique_media_paths
-from scripts.note_types import MONO_NOTE_TYPES, NoteType
+from mnemo.anki.genanki_export import export_apkg
+from mnemo.anki.media import bundled_font_paths, unique_media_paths
+from mnemo.anki.note_types import MONO_NOTE_TYPES, NoteType
 
 
 @dataclass

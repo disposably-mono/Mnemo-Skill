@@ -19,9 +19,9 @@ from typing import Iterable
 
 import genanki
 
-from scripts.adapter import AnkiNote
-from scripts.media import bundled_font_paths, unique_media_paths
-from scripts.note_types import MONO_NOTE_TYPES, NoteType
+from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.media import bundled_font_paths, unique_media_paths
+from mnemo.anki.note_types import MONO_NOTE_TYPES, NoteType
 
 # genanki recommends model/deck ids in [1<<30, 1<<31). We derive them from the
 # name so they're stable across runs (CRC32 is deterministic; offset into range).

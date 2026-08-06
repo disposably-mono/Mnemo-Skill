@@ -1,9 +1,9 @@
 """Tests for the Fact -> Anki note adapter (scripts/adapter.py)."""
 
-from scripts.card_schema import Fact
+from mnemo.core.card_schema import Fact
 import pytest
 
-from scripts.adapter import AnkiNote, MappingError, adapt, load_mappings
+from mnemo.anki.adapter import AnkiNote, MappingError, adapt, load_mappings
 
 
 def _qa(**over):

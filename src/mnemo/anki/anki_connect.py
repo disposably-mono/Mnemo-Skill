@@ -18,8 +18,8 @@ from typing import Any, Iterable
 
 import requests
 
-from scripts.adapter import AnkiNote
-from scripts.note_types import NoteType
+from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.note_types import NoteType
 
 DEFAULT_URL = "http://localhost:8765"
 API_VERSION = 6

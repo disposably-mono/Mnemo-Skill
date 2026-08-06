@@ -2,26 +2,19 @@
 
 from __future__ import annotations
 
+from importlib import resources
 from pathlib import Path
 from typing import Iterable
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-_FONT_DIR = _REPO_ROOT / "assets" / "fonts"
-_FONT_NAMES = (
-    "_dmserifdisplay-regular.ttf",
-    "_dmmono-regular.ttf",
-    "_dmmono-medium.ttf",
-    "_outfit-variable.ttf",
-)
 
 
 def bundled_font_paths() -> list[Path]:
     """Return the fonts referenced by the MONO note-type CSS."""
-    paths = [_FONT_DIR / name for name in _FONT_NAMES]
-    missing = [str(path) for path in paths if not path.is_file()]
-    if missing:
-        raise FileNotFoundError(f"missing bundled fonts: {', '.join(missing)}")
-    return paths
+    font_root = resources.files("mnemo.resources.fonts")
+    return sorted(
+        Path(str(path))
+        for path in font_root.iterdir()
+        if path.name.endswith(".ttf")
+    )
 
 
 def unique_media_paths(paths: Iterable[Path]) -> list[Path]:

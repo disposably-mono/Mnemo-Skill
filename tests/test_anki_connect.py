@@ -12,8 +12,8 @@ import pytest
 import requests
 import responses
 
-from scripts.adapter import AnkiNote
-from scripts.anki_connect import AnkiConnect, AnkiConnectError
+from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
 
 URL = "http://localhost:8765"
 
@@ -154,7 +154,7 @@ def test_change_deck_noop_on_empty_card_list():
 
 @responses.activate
 def test_ensure_note_types_creates_missing_models_with_cloze_flag():
-    from scripts.note_types import MONO_NOTE_TYPES
+    from mnemo.anki.note_types import MONO_NOTE_TYPES
     created = []
     updated_templates = []
     updated_styling = []

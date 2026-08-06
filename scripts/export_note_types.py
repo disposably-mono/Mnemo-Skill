@@ -16,9 +16,9 @@ from pathlib import Path
 if __package__ in (None, ""):  # allow `python scripts/export_note_types.py`
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.adapter import AnkiNote
-from scripts.genanki_export import ExportResult, export_apkg
-from scripts.note_types import MONO_NOTE_TYPES, NoteType
+from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.genanki_export import ExportResult, export_apkg
+from mnemo.anki.note_types import MONO_NOTE_TYPES, NoteType
 
 DEFAULT_OUT = "mnemo-note-types.apkg"
 INSTALL_DECK = "Mnemo Note Types"

@@ -20,10 +20,6 @@ _BULLET = re.compile(r"^\s*(?:[-*+] |\d+[.)]\s+)(.+)$")
 _CLOZE = re.compile(r"\{\{c\d+::(.*?)(?:::[^}]*)?\}\}")
 _WORDS = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
 _FACT_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
-_MULTI_SIGNAL = re.compile(
-    r"(?:;|\b(?:first|second|third|finally)\b|\b(?:and|but|whereas|while)\b)",
-    re.IGNORECASE,
-)
 # Shared relational-verb vocabulary. A narrow list silently drops ordinary
 # declarative facts (e.g. "converts", "forms", "encodes") because render_prompt
 # can find no relation to test. Keep this single source of truth so _VERB and

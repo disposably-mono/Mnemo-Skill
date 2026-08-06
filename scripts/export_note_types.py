@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 if __package__ in (None, ""):  # allow `python scripts/export_note_types.py`
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from mnemo.anki.adapter import AnkiNote
 from mnemo.anki.genanki_export import ExportResult, export_apkg

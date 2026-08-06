@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Sequence
 
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from mnemo.anki.adapter import AnkiNote, Mappings, adapt
 from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError

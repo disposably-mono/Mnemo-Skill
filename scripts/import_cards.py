@@ -15,11 +15,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Allow running directly as a script (`python scripts/import_cards.py ...`, the
-# form SKILL.md documents) by putting the repo root on the path before importing
-# the `scripts` package.
+# Allow running directly as a script (`python scripts/import_cards.py ...`) by
+# putting the src-layout package root on the import path.
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from mnemo.anki.adapter import AnkiNote, MappingError, Mappings, adapt, load_mappings
 from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError

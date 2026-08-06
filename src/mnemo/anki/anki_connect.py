@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-import requests
-
 from mnemo.anki.adapter import AnkiNote
 from mnemo.anki.note_types import NoteType
 
@@ -28,6 +26,13 @@ _TIMEOUT_S = 10
 
 class AnkiConnectError(RuntimeError):
     """Raised when AnkiConnect returns an error or an unexpected response."""
+
+
+def _requests():
+    """Import requests only when a live AnkiConnect call is made."""
+    import requests
+
+    return requests
 
 
 @dataclass
@@ -46,6 +51,7 @@ class AnkiConnect:
     # --- core transport -----------------------------------------------------
 
     def _invoke(self, action: str, **params: Any) -> Any:
+        requests = _requests()
         payload = {"action": action, "version": API_VERSION, "params": params}
         response = requests.post(self.url, json=payload, timeout=self.timeout)
         response.raise_for_status()
@@ -61,7 +67,9 @@ class AnkiConnect:
         try:
             self._invoke("version")
             return True
-        except (requests.RequestException, AnkiConnectError):
+        except (ModuleNotFoundError, AnkiConnectError):
+            return False
+        except _requests().RequestException:
             return False
 
     # --- decks --------------------------------------------------------------

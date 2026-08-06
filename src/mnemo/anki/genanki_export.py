@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-import genanki
-
 from mnemo.anki.adapter import AnkiNote
 from mnemo.anki.media import bundled_font_paths, unique_media_paths
 from mnemo.anki.note_types import MONO_NOTE_TYPES, NoteType
@@ -27,6 +25,13 @@ from mnemo.anki.note_types import MONO_NOTE_TYPES, NoteType
 # name so they're stable across runs (CRC32 is deterministic; offset into range).
 _ID_BASE = 1 << 30
 _ID_SPAN = 1 << 30
+
+
+def _genanki():
+    """Import genanki only when an offline package is being built."""
+    import genanki
+
+    return genanki
 
 
 def stable_id(name: str) -> int:
@@ -45,6 +50,7 @@ class ExportResult:
 
 def model_for(note_type: NoteType) -> genanki.Model:
     """Build a genanki Model mirroring a MONO NoteType (cloze flag preserved)."""
+    genanki = _genanki()
     model_type = genanki.Model.CLOZE if note_type.is_cloze else genanki.Model.FRONT_BACK
     return genanki.Model(
         model_id=stable_id(note_type.name),
@@ -68,6 +74,7 @@ def to_genanki_note(note: AnkiNote, note_type: NoteType) -> genanki.Note:
     all field values, so any edit would otherwise change it). Notes without a
     ``CardID`` fall back to genanki's default guid behavior.
     """
+    genanki = _genanki()
     model = model_for(note_type)
     fields = [note.fields.get(name, "") for name in note_type.fields]
     card_id = note.fields.get("CardID") or ""
@@ -81,6 +88,7 @@ def export_apkg(
     note_types: dict[str, NoteType] = MONO_NOTE_TYPES,
 ) -> ExportResult:
     """Write notes to a .apkg, one genanki Deck per distinct deck name."""
+    genanki = _genanki()
     path = Path(path)
     notes = list(notes)
     decks: dict[str, genanki.Deck] = {}

@@ -28,6 +28,22 @@ cards/*
 !cards/.gitkeep
 *.apkg
 
+# Mnemo workspace private study files
+workspace/courses/**/source-materials/*
+workspace/courses/**/cornell-notes/*
+workspace/courses/**/cards/*
+workspace/courses/**/exports/*
+
+# Keep workspace scaffolding and templates tracked
+!workspace/
+!workspace/README.md
+!workspace/courses/
+!workspace/courses/_template/
+!workspace/courses/**/README.md
+!workspace/courses/**/*.yaml
+!workspace/courses/**/*.template.md
+!workspace/courses/**/.gitkeep
+
 # Local config (keep the .example, ignore the real one)
 config.toml
 

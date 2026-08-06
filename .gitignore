@@ -33,6 +33,7 @@ workspace/courses/**/source-materials/*
 workspace/courses/**/cornell-notes/*
 workspace/courses/**/cards/*
 workspace/courses/**/exports/*
+workspace/courses/**/module.yaml
 
 # Keep workspace scaffolding and templates tracked
 !workspace/

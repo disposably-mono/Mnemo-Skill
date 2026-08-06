@@ -11,10 +11,13 @@ per slide). SKILL.md step 2 runs:
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 _TEXT_EXTS = {".md", ".markdown", ".txt", ".text"}
 MIN_IMAGE_PX = 32
@@ -100,6 +103,7 @@ def _ocr_page_text(page) -> str:
         textpage = page.get_textpage_ocr(full=True)
         return page.get_text(textpage=textpage).strip()
     except Exception:  # missing tesseract/tessdata, unsupported page, etc.
+        _logger.debug("OCR failed for page; falling back to no OCR text", exc_info=True)
         return ""
 
 
@@ -125,6 +129,7 @@ def _extract_pdf_tables(page) -> list[str]:
     try:
         finder = page.find_tables()
     except Exception:  # detection is best-effort; never fail ingestion over it
+        _logger.debug("PDF table detection failed for page", exc_info=True)
         return []
     blocks: list[str] = []
     for table in finder.tables:
@@ -166,6 +171,7 @@ def _extract_pdf_math(page, source: str) -> list[str]:
     try:
         blocks = page.get_text("dict", sort=True).get("blocks", [])
     except Exception:
+        _logger.debug("PDF math extraction failed for page %s", source, exc_info=True)
         return []
     markers: list[str] = []
     seen: set[str] = set()
@@ -203,6 +209,10 @@ def _extract_pdf_images(
     try:
         images = page.get_images(full=True)
     except Exception:
+        _logger.debug(
+            "listing embedded images failed for %s p.%s", path.name, page_number,
+            exc_info=True,
+        )
         return []
     markers: list[str] = []
     seen_xrefs: set[int] = set()
@@ -222,6 +232,10 @@ def _extract_pdf_images(
             saved = output / filename
             saved.write_bytes(info["image"])
         except Exception:
+            _logger.debug(
+                "extracting embedded image xref=%s failed for %s p.%s",
+                xref, path.name, page_number, exc_info=True,
+            )
             continue
         markers.append(f"[figure: {saved} | {path.name} p.{page_number}]")
     return markers
@@ -291,7 +305,7 @@ def _extract_pptx_chart(chart) -> str:
         if chart.has_title:
             title = chart.chart_title.text_frame.text.strip()
     except Exception:
-        pass
+        _logger.debug("reading pptx chart title failed", exc_info=True)
 
     series = list(chart.series)
     names = [
@@ -304,6 +318,7 @@ def _extract_pptx_chart(chart) -> str:
             for category in chart.plots[0].categories
         ]
     except Exception:
+        _logger.debug("reading pptx chart categories failed", exc_info=True)
         categories = []
 
     lines = ["Chart:"]

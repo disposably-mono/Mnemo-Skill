@@ -363,6 +363,57 @@ def test_pptx_chart_preserves_categories_series_and_values(tmp_path):
     assert "Q2 | 12.5 | 9" in chunks[0].text
 
 
+def test_extract_pdf_tables_logs_debug_and_returns_empty_on_failure(caplog):
+    class BrokenPage:
+        def find_tables(self):
+            raise RuntimeError("boom: malformed table structure")
+
+    import logging
+
+    from mnemo.pipeline.ingest import _extract_pdf_tables
+
+    with caplog.at_level(logging.DEBUG, logger="mnemo.pipeline.ingest"):
+        result = _extract_pdf_tables(BrokenPage())
+
+    assert result == []  # best-effort: swallow, don't fail ingestion
+    assert any("table detection failed" in record.message for record in caplog.records)
+
+
+def test_extract_pdf_images_logs_debug_and_returns_empty_on_failure(tmp_path, caplog):
+    class BrokenPage:
+        def get_images(self, full=True):
+            raise RuntimeError("boom: malformed image directory")
+
+    import logging
+
+    from mnemo.pipeline.ingest import _extract_pdf_images
+
+    with caplog.at_level(logging.DEBUG, logger="mnemo.pipeline.ingest"):
+        result = _extract_pdf_images(
+            doc=None, page=BrokenPage(), path=tmp_path / "lecture.pdf",
+            page_number=1, output=tmp_path,
+        )
+
+    assert result == []  # best-effort: swallow, don't fail ingestion
+    assert any("listing embedded images failed" in record.message for record in caplog.records)
+
+
+def test_ocr_page_text_logs_debug_and_returns_empty_on_failure(caplog):
+    class BrokenPage:
+        def get_textpage_ocr(self, full=True):
+            raise RuntimeError("boom: missing tesseract")
+
+    import logging
+
+    from mnemo.pipeline.ingest import _ocr_page_text
+
+    with caplog.at_level(logging.DEBUG, logger="mnemo.pipeline.ingest"):
+        result = _ocr_page_text(BrokenPage())
+
+    assert result == ""  # best-effort: swallow, don't fail ingestion
+    assert any("OCR failed" in record.message for record in caplog.records)
+
+
 def test_unknown_extension_raises(tmp_path):
     weird = tmp_path / "image.png"
     weird.write_bytes(b"\x89PNG")

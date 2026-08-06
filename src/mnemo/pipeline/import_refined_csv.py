@@ -2,7 +2,7 @@
 """Import a Mnemo refined CSV into a dedicated Anki deck via AnkiConnect.
 
 Each CSV row is converted into a validated Fact (``row_to_fact``) and rendered
-through the shared note-type adapter (``scripts.adapter.adapt``) using the
+through the shared note-type adapter (``mnemo.anki.adapter.adapt``) using the
 ``REFINED_MAPPINGS`` field templates; only presentation-only CSV columns are
 copied into the note afterwards (see ``_apply_passthrough``).
 """
@@ -140,7 +140,7 @@ class RefinedImportReport:
 
 # How a refined Fact renders into the refined note types: a plain adapter
 # mappings dict, so the CSV path shares the exact rendering machinery used by
-# the JSONL/Fact path (scripts.adapter.adapt).
+# the JSONL/Fact path (mnemo.anki.adapter.adapt).
 REFINED_MAPPINGS: Mappings = {
     "qa": {BASIC_MODEL: {
         "Front": "{front}", "Back": "{back}", "Extra": "{extra}",

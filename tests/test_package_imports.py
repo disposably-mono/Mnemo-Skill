@@ -131,3 +131,11 @@ def test_legacy_anki_script_modules_reexport_package_apis(
     package = __import__(package_module, fromlist=[export_name])
 
     assert getattr(legacy, export_name) is getattr(package, export_name)
+
+
+def test_export_note_types_wrapper_reexports_package_api():
+    legacy = __import__("scripts.export_note_types", fromlist=["export_note_types"])
+    package = __import__("mnemo.pipeline.export_note_types", fromlist=["export_note_types"])
+
+    assert legacy.export_note_types is package.export_note_types
+    assert legacy.__all__ == ["export_note_types", "main"]

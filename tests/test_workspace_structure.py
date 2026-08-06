@@ -45,6 +45,19 @@ def test_workspace_private_outputs_are_ignored() -> None:
     assert all(result.returncode == 0 for result in results)
 
 
+def test_workspace_private_files_with_template_like_names_are_ignored() -> None:
+    private_files = (
+        "workspace/courses/biology/source-materials/private.yaml",
+        "workspace/courses/biology/cards/README.md",
+        "workspace/courses/biology/cornell-notes/private.template.md",
+        "workspace/courses/biology/exports/private.gitkeep",
+    )
+
+    results = [run_git_check_ignore(path) for path in private_files]
+
+    assert all(result.returncode == 0 for result in results)
+
+
 def test_workspace_templates_are_not_ignored() -> None:
     tracked_files = (
         "workspace/README.md",

@@ -39,10 +39,15 @@ workspace/courses/**/exports/*
 !workspace/README.md
 !workspace/courses/
 !workspace/courses/_template/
-!workspace/courses/**/README.md
-!workspace/courses/**/*.yaml
-!workspace/courses/**/*.template.md
-!workspace/courses/**/.gitkeep
+!workspace/courses/_template/README.md
+!workspace/courses/_template/course.yaml
+!workspace/courses/_template/00-module-template/
+!workspace/courses/_template/00-module-template/README.md
+!workspace/courses/_template/00-module-template/module.yaml
+!workspace/courses/_template/00-module-template/source-materials/.gitkeep
+!workspace/courses/_template/00-module-template/cornell-notes/cornell-note.template.md
+!workspace/courses/_template/00-module-template/cards/.gitkeep
+!workspace/courses/_template/00-module-template/exports/.gitkeep
 
 # Local config (keep the .example, ignore the real one)
 config.toml

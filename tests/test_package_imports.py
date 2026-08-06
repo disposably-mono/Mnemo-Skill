@@ -70,6 +70,21 @@ def test_direct_script_help_works_without_site_packages(script):
     assert "usage:" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "module",
+    ["adapter", "anki_connect", "genanki_export", "media", "note_types"],
+)
+def test_legacy_anki_script_modules_import_without_site_packages(module):
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", f"from scripts.{module} import *"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_bundled_font_paths_extracts_zip_resources_and_keeps_them_available(tmp_path):
     """Zip-installed resources need real paths until Anki has consumed them."""
     archive = tmp_path / "mnemo.zip"

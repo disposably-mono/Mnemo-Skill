@@ -18,6 +18,13 @@ Read [references/knowledge_structures.md](references/knowledge_structures.md) wh
 authoring comparisons, processes, arguments, narratives, quantitative material,
 examples, exceptions, procedures, or enrichment.
 
+## Commands
+
+Prefer the installed package commands: `mnemo-ingest`, `mnemo-generate`,
+`mnemo-audit`, `mnemo-import`, and `mnemo-export-note-types`. The legacy
+`scripts/` commands remain compatibility wrappers during migration, including
+`python scripts/ingest.py <source>`.
+
 ## Workflow
 
 Mnemo divides labor by what each layer does best. Deterministic scripts ingest,
@@ -29,7 +36,7 @@ deck.
 1. Identify the source, deck, topics, and expected prerequisite knowledge.
 
 2. **Ingest (deterministic).** Read Markdown or text directly. For PDF/PPTX, run
-   `python scripts/ingest.py <source>` and preserve page/slide provenance.
+   `mnemo-ingest <source>` and preserve page/slide provenance.
    Image-only (likely scanned) PDF pages are surfaced as a visible marker
    instead of being dropped; add `--ocr` to recover their text through Tesseract
    when available, which is tagged `(OCR)` in provenance as lower confidence.
@@ -44,7 +51,7 @@ deck.
 3. **Plan and draft (deterministic).** Run
 
    ```bash
-   python scripts/generate_flashcards.py notes.md --output cards/session.csv
+   mnemo-generate notes.md --output cards/session.csv
    ```
 
    This extracts objectives, builds and classifies knowledge units, writes the
@@ -75,7 +82,7 @@ deck.
 6. **Audit (deterministic).** Run the independent rubric audit:
 
    ```bash
-   python scripts/audit_cards.py cards/session.csv \
+   mnemo-audit cards/session.csv \
      --settings cards/session.settings.json
    ```
 
@@ -233,7 +240,7 @@ def456,45,0.90,0
 Run:
 
 ```bash
-python scripts/audit_cards.py cards/session.csv \
+mnemo-audit cards/session.csv \
   --settings cards/session.settings.json \
   --retention-log reviews.csv
 ```
@@ -248,14 +255,15 @@ The generator emits notes plus a scheduler sidecar; Anki CSV import does not app
 deck options. Apply the sidecar to the target preset manually or through a separate
 AnkiConnect preset workflow.
 
-For the repository's existing direct-import path, continue to use approved Fact
-JSONL with `python scripts/import_cards.py cards/session.jsonl`. Its `.apkg`
-fallback and native image-occlusion limitations remain unchanged.
+For the repository's existing direct-import path, use approved Fact JSONL with
+`mnemo-import cards/session.jsonl`. Its `.apkg` fallback and native
+image-occlusion limitations remain unchanged.
 
 ## Skill Architecture
 
 Keep only `name` and `description` in YAML frontmatter for Claude skill triggering.
 Keep workflow and invariants in this file. Keep research detail and citations in
-`references/`. Keep deterministic operations in `scripts/`. Keep reusable output
-resources in `assets/` only when an actual template or media asset is required.
-Do not duplicate reference prose in this file.
+`references/`. Keep deterministic operations in `src/mnemo/`; `scripts/` holds
+compatibility wrappers only. Keep reusable output resources in `assets/` only
+when an actual template or media asset is required. Do not duplicate reference
+prose in this file.

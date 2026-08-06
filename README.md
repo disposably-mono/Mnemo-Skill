@@ -82,10 +82,30 @@ valid; images and card formats are selected only when they fit the material.
    but this package is useful for previewing or sharing them:
 
    ```bash
-   python scripts/export_note_types.py -o mnemo-note-types.apkg
+   mnemo-export-note-types -o mnemo-note-types.apkg
    ```
 
    Import the resulting package with **File → Import** in Anki.
+
+## Workspace and Commands
+
+Use `workspace/courses` as your private, course-first study workspace. Copy the
+tracked course and module templates, then keep source materials, Cornell notes,
+card drafts, and exports in the module folders; real study files are ignored by
+git. See [the workflow](docs/workflow.md) and [naming conventions](docs/naming-conventions.md).
+
+Install Mnemo to use these preferred commands:
+
+```bash
+mnemo-ingest <source>
+mnemo-generate notes.md --output cards/session.csv
+mnemo-audit cards/session.csv --settings cards/session.settings.json
+mnemo-import cards/session.jsonl
+mnemo-export-note-types -o mnemo-note-types.apkg
+```
+
+Existing script commands remain supported as compatibility wrappers during the
+migration, including `python scripts/ingest.py <source>`.
 
 ## Import configuration
 
@@ -109,7 +129,7 @@ Back = "{back}<br>{source}"
 Run an approved import with:
 
 ```bash
-python scripts/import_cards.py cards/session.jsonl
+mnemo-import cards/session.jsonl
 ```
 
 MONO fonts are bundled in both live imports and generated `.apkg` files, so
@@ -125,4 +145,4 @@ pytest --cov                # with coverage (target: 80%+)
 ## License
 
 Code is MIT — see [LICENSE](LICENSE). Bundled font files retain their SIL Open
-Font License terms in `assets/fonts/LICENSE-*.txt`.
+Font License terms in `src/mnemo/resources/fonts/LICENSE-*.txt`.

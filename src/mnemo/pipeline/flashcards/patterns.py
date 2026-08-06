@@ -52,8 +52,11 @@ _LIST_STATEMENT = re.compile(
     r"has four)\s+(?P<items>.+?)[.!?]?$",
     re.IGNORECASE,
 )
-_TECHNICAL = re.compile(
-    r"\b[A-Z]{2,}\b|\b(?:theorem|algorithm|enzyme|protocol|doctrine|statute|"
+# Case-sensitive: only genuine all-caps runs (e.g. "DNA", "API") count as
+# acronyms. Folding this under IGNORECASE would match any 2+ letter word.
+_ACRONYM = re.compile(r"\b[A-Z]{2,}\b")
+_TECHNICAL_KEYWORDS = re.compile(
+    r"\b(?:theorem|algorithm|enzyme|protocol|doctrine|statute|"
     r"coefficient|derivative|mitosis|syntax|jurisdiction)\b",
     re.IGNORECASE,
 )

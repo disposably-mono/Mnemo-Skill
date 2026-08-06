@@ -16,6 +16,7 @@ from mnemo.pipeline.generate_flashcards import (
     parse_content,
     parse_steps,
     plan_knowledge,
+    requires_context,
     split_list_items,
     split_sentences,
     validate_card,
@@ -621,3 +622,9 @@ def test_cli_with_interleave_flag_explicitly_enables_interleave_topics(tmp_path)
 
     settings = json.loads(output.with_suffix(".settings.json").read_text())
     assert settings["interleave_topics"] is True
+
+
+def test_requires_context_ignores_plain_prose_but_flags_acronyms_and_keywords():
+    assert requires_context("the cat sat") is False
+    assert requires_context("DNA carries genetic information.") is True
+    assert requires_context("This algorithm sorts the list.") is True

@@ -13,10 +13,11 @@ from mnemo.core.verbatim import has_inline_verbatim, without_inline_verbatim
 
 from .models import DEFAULT_SEED, Card, SourceUnit
 from .patterns import (
+    _ACRONYM,
     _CLOZE,
     _DEFINITION,
     _RELATION,
-    _TECHNICAL,
+    _TECHNICAL_KEYWORDS,
     _VERB,
 )
 from .text import (
@@ -292,7 +293,11 @@ def explanation_is_thin(card: Card) -> bool:
 
 def requires_context(*values: str) -> bool:
     text = " ".join(values)
-    return bool(_TECHNICAL.search(text) or re.search(r"\b[A-Za-z]+\d+\b", text))
+    return bool(
+        _ACRONYM.search(text)
+        or _TECHNICAL_KEYWORDS.search(text)
+        or re.search(r"\b[A-Za-z]+\d+\b", text)
+    )
 
 
 def make_mnemonic(components: Sequence[str]) -> str:

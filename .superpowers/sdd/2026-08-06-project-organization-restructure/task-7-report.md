@@ -57,3 +57,15 @@ Additional verification: `git diff --check` passed before commit.
 ## Concerns
 
 - None.
+
+## Fix Round 1
+
+- Fixed `tests/test_docs_consistency.py` so every required documentation path
+  is asserted to exist before its contents are read.
+- Added a regression test that fails when any required documentation file is
+  absent, using `tmp_path` without removing repository files.
+- Updated README setup instructions to run `pip install -e ".[dev]"`, which
+  installs the project and its documented `mnemo-*` entrypoints.
+
+RED: the new regression test failed because the required loader was absent.
+GREEN: `pytest tests/test_docs_consistency.py -q` passed with 2 tests.

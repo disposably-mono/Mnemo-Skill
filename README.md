@@ -72,8 +72,11 @@ valid; images and card formats are selected only when they fit the material.
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
    ```
+
+   This installs Mnemo and its development dependencies, including the
+   `mnemo-*` command-line entrypoints used below.
 
 5. Copy `config.example.toml` to `config.toml` and adjust.
 

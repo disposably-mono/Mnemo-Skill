@@ -254,7 +254,17 @@ def _collect_local_image(
     """Register a CSV-local image for upload and return the field value."""
     image_url = (row.get("ImageURL") or "").strip()
     if image_url and "://" not in image_url:
-        image_path = base_dir / image_url
+        if Path(image_url).is_absolute():
+            raise ValueError(
+                f"ImageURL must be a relative path within the CSV directory, "
+                f"got absolute path {image_url!r}"
+            )
+        base_dir = base_dir.resolve()
+        image_path = (base_dir / image_url).resolve()
+        if not image_path.is_relative_to(base_dir):
+            raise ValueError(
+                f"ImageURL {image_url!r} resolves outside the CSV directory"
+            )
         if not image_path.exists():
             raise FileNotFoundError(image_path)
         media[image_path] = None

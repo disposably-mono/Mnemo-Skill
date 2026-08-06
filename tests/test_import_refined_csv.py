@@ -94,6 +94,40 @@ def test_refined_csv_rejects_missing_fields_ids_and_media(tmp_path):
         load_notes(path, "Deck")
 
 
+def test_refined_csv_rejects_absolute_image_url(tmp_path):
+    path = tmp_path / "cards.csv"
+    _write(path, [{"Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+                   "ImageURL": "/etc/passwd"}])
+    with pytest.raises(ValueError, match="absolute path"):
+        load_notes(path, "Deck")
+
+
+def test_refined_csv_rejects_image_url_traversal_outside_base_dir(tmp_path):
+    outside = tmp_path.parent / "outside-secret.png"
+    outside.write_bytes(b"png")
+    path = tmp_path / "cards.csv"
+    _write(path, [{"Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+                   "ImageURL": f"../{outside.name}"}])
+    with pytest.raises(ValueError, match="outside the CSV directory"):
+        load_notes(path, "Deck")
+    outside.unlink()
+
+
+def test_refined_csv_accepts_well_behaved_relative_image_url(tmp_path):
+    img_dir = tmp_path / "images"
+    img_dir.mkdir()
+    image = img_dir / "diagram.png"
+    image.write_bytes(b"png")
+    path = tmp_path / "cards.csv"
+    _write(path, [{"Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+                   "ImageURL": "images/diagram.png"}])
+
+    notes, media = load_notes(path, "Deck")
+
+    assert media == [image]
+    assert notes[0].fields["ImageURL"] == "diagram.png"
+
+
 def test_local_image_field_rewritten_to_stored_basename(tmp_path):
     # BUG 4: ImageURL holds the CSV-relative path, but AnkiConnect stores
     # media flat by basename — the note field must be rewritten to match

@@ -22,16 +22,30 @@ dev = [
     "responses>=0.25",
 ]
 
-# This repo is run as a toolkit/skill, not installed as a distributable package,
-# so no build-system is declared. Tooling config below is what matters.
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+mnemo-ingest = "mnemo.cli.ingest:main"
+mnemo-generate = "mnemo.cli.generate:main"
+mnemo-audit = "mnemo.cli.audit:main"
+mnemo-import = "mnemo.cli.import_cards:main"
+mnemo-export-note-types = "mnemo.cli.export_note_types:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"mnemo.resources.fonts" = ["*.txt", "*.ttf"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-q"
 
 [tool.coverage.run]
-source = ["scripts"]
+source = ["src/mnemo"]
 branch = true
 
 [tool.coverage.report]

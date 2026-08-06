@@ -1,0 +1,1 @@
+"""Mnemo command-line entrypoints."""

@@ -1,0 +1,1 @@
+"""Package-owned font resources."""

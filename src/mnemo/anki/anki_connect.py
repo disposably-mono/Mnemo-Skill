@@ -15,6 +15,7 @@ import base64
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 from mnemo.anki.adapter import AnkiNote
 from mnemo.anki.note_types import NoteType
@@ -45,6 +46,7 @@ class AddResult:
 
 class AnkiConnect:
     def __init__(self, url: str = DEFAULT_URL, timeout: float = _TIMEOUT_S):
+        _validate_url(url)
         self.url = url
         self.timeout = timeout
 
@@ -190,6 +192,20 @@ class AnkiConnect:
             for n in notes
         ]
         result = self._invoke("addNotes", notes=payload)
+        if not isinstance(result, list) or len(result) != len(notes):
+            actual = len(result) if isinstance(result, list) else type(result).__name__
+            raise AnkiConnectError(
+                f"addNotes returned {actual} result(s) for "
+                f"{len(notes)} submitted note(s)"
+            )
+        malformed_ids = [
+            nid for nid in result
+            if nid is not None and (isinstance(nid, bool) or not isinstance(nid, int))
+        ]
+        if malformed_ids:
+            raise AnkiConnectError(
+                f"addNotes returned malformed note id(s): {malformed_ids!r}"
+            )
         added_notes = [
             (note, nid) for note, nid in zip(notes, result) if nid is not None
         ]
@@ -216,12 +232,18 @@ class AnkiConnect:
             return
         requested_ids = [nid for _, nid in added_notes]
         infos = self._invoke("notesInfo", notes=requested_ids)
+        if not isinstance(infos, list):
+            raise AnkiConnectError("notesInfo returned a non-list response")
         if len(infos) != len(added_notes):
             raise AnkiConnectError(
                 f"notesInfo returned {len(infos)} entries for "
                 f"{len(added_notes)} requested notes; cannot safely pin decks"
             )
         for expected_id, info in zip(requested_ids, infos):
+            if not isinstance(info, dict):
+                raise AnkiConnectError(
+                    f"notesInfo entry for note {expected_id} is not an object"
+                )
             actual_id = info.get("noteId")
             if actual_id != expected_id:
                 raise AnkiConnectError(
@@ -230,7 +252,17 @@ class AnkiConnect:
                 )
         cards_by_deck: dict[str, list[int]] = {}
         for (note, _nid), info in zip(added_notes, infos):
-            cards_by_deck.setdefault(note.deck, []).extend(info.get("cards", []))
+            card_ids = info.get("cards", [])
+            if (
+                not isinstance(card_ids, list)
+                or any(isinstance(card_id, bool) or not isinstance(card_id, int)
+                       for card_id in card_ids)
+            ):
+                raise AnkiConnectError(
+                    f"notesInfo cards for note {info.get('noteId')!r} must be "
+                    "a list of integers"
+                )
+            cards_by_deck.setdefault(note.deck, []).extend(card_ids)
         for deck, card_ids in cards_by_deck.items():
             self.change_deck(card_ids, deck)
 
@@ -239,3 +271,12 @@ class AnkiConnect:
     def sync(self) -> None:
         """Trigger an AnkiWeb sync (pushes new cards toward the phone apps)."""
         self._invoke("sync")
+
+
+def _validate_url(url: str) -> None:
+    parsed = urlparse(url)
+    local_hosts = {"localhost", "127.0.0.1", "::1"}
+    if parsed.scheme != "http" or parsed.hostname not in local_hosts:
+        raise AnkiConnectError(
+            "AnkiConnect URL must be an http URL on localhost, 127.0.0.1, or ::1"
+        )

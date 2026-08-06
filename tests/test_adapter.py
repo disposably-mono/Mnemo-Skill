@@ -30,6 +30,17 @@ def test_qa_maps_to_mono_basic():
     assert note.fields["Distractors"] == ""  # none provided
 
 
+def test_qa_text_fields_escape_untrusted_html():
+    note = adapt(_qa(content={
+        "front": '<img src=x onerror="alert(1)">',
+        "back": "A < B & C",
+    }, source="lecture <1>"))
+
+    assert note.fields["Front"] == '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;'
+    assert note.fields["Back"] == "A &lt; B &amp; C"
+    assert note.fields["Source"] == "lecture &lt;1&gt;"
+
+
 def test_qa_without_source_yields_empty_source_field():
     note = adapt(_qa(source=None))
     assert note.fields["Source"] == ""
@@ -124,6 +135,19 @@ def test_mapping_targets_stock_basic_note_type():
     assert note.fields == {"Front": "Capital of Australia?", "Back": "Canberra"}
     assert note.deck == "Geography"
     assert note.tags == ["geo", "auto"]
+
+
+def test_mapping_placeholders_escape_untrusted_html():
+    mappings = {"qa": {"Basic": {"Front": "{front}", "Back": "{back}|{source}"}}}
+    fact = _qa(
+        content={"front": "<script>x</script>", "back": "A & B"},
+        source="source <1>",
+    )
+
+    note = adapt(fact, mappings=mappings)
+
+    assert note.fields["Front"] == "&lt;script&gt;x&lt;/script&gt;"
+    assert note.fields["Back"] == "A &amp; B|source &lt;1&gt;"
 
 
 def test_mapping_distractors_placeholder_renders_confusions():
@@ -549,7 +573,7 @@ def test_list_item_with_html_special_chars_and_braces_is_escaped():
     # Normal item should work
     assert "{{c1::Normal item}}" in text
     # Item with }} should have }} escaped
-    assert "{{c2::Item with }}}}" in text  # }} becomes }}}}
+    assert "{{c2::Item with &#125;&#125;}}" in text
     # Item with < and & should be escaped
     assert "{{c3::Item with &lt; and &amp;}}" in text
     # Cloze structure should remain intact

@@ -591,6 +591,12 @@ def test_image_html_attributes_are_escaped():
     assert "&quot;labeled&quot;" in card.back
 
 
+def test_generated_card_text_fields_escape_html():
+    card = build_cards(parse_content("Alpha is <script>alert(1)</script>."))[0]
+
+    assert card.back == "&lt;script&gt;alert(1)&lt;/script&gt;"
+
+
 def test_cli_with_no_interleave_produces_config_with_interleave_topics_false(tmp_path):
     source = tmp_path / "notes.md"
     output = tmp_path / "deck.csv"

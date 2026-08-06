@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import urlparse
 
 from mnemo.anki.adapter import AnkiNote, Mappings, adapt
 from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
@@ -184,20 +186,20 @@ def row_to_fact(row: dict[str, str], deck: str) -> Fact:
     if not card_id:
         raise CardValidationError("CardID is required")
     annotations = {
-        "extra": row.get("Extra") or "",
-        "mnemonic": row.get("Mnemonic") or "",
-        "topic": row.get("Topic") or "",
+        "extra": _csv_text(row.get("Extra") or ""),
+        "mnemonic": _csv_text(row.get("Mnemonic") or ""),
+        "topic": _csv_text(row.get("Topic") or ""),
     }
     card_type = (row.get("CardType") or "").strip()
     if card_type == "cloze":
-        content = {"text": row.get("Front") or "", **annotations}
+        content = {"text": _csv_text(row.get("Front") or ""), **annotations}
     elif card_type == "typed":
-        content = {"prompt": row.get("Front") or "",
-                   "answer": row.get("Back") or "", **annotations}
+        content = {"prompt": _csv_text(row.get("Front") or ""),
+                   "answer": _csv_text(row.get("Back") or ""), **annotations}
     else:
         card_type = "qa"
-        content = {"front": row.get("Front") or "",
-                   "back": row.get("Back") or "", **annotations}
+        content = {"front": _csv_text(row.get("Front") or ""),
+                   "back": _csv_text(row.get("Back") or ""), **annotations}
 
     data: dict[str, object] = {
         "type": card_type,
@@ -207,7 +209,7 @@ def row_to_fact(row: dict[str, str], deck: str) -> Fact:
         "tags": _augmented_tags(row, card_id),
     }
     if (row.get("Source") or "").strip():
-        data["source"] = row["Source"]
+        data["source"] = _csv_text(row["Source"])
     for column, key in _METADATA_COLUMNS:
         if (row.get(column) or "").strip():
             data[key] = row[column].strip()
@@ -253,7 +255,12 @@ def _collect_local_image(
 ) -> str:
     """Register a CSV-local image for upload and return the field value."""
     image_url = (row.get("ImageURL") or "").strip()
-    if image_url and "://" not in image_url:
+    parsed = urlparse(image_url)
+    if image_url and (parsed.scheme or parsed.netloc):
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("remote ImageURL values must use http or https")
+        return _field(image_url)
+    if image_url:
         if Path(image_url).is_absolute():
             raise ValueError(
                 f"ImageURL must be a relative path within the CSV directory, "
@@ -271,7 +278,7 @@ def _collect_local_image(
         # AnkiConnect stores media flat by basename, so the field must
         # reference that basename rather than the CSV-relative path.
         image_url = image_path.name
-    return image_url
+    return _field(image_url)
 
 
 def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> None:
@@ -284,10 +291,10 @@ def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> N
     rendering path.
     """
     passthrough = {
-        "CardType": row.get("CardType") or "",
+        "CardType": _field(row.get("CardType") or ""),
         "ImageURL": image_url,
-        "ImageAlt": row.get("ImageAlt") or "",
-        "Back": row.get("Back") or "",
+        "ImageAlt": _field(row.get("ImageAlt") or ""),
+        "Back": _field(_csv_text(row.get("Back") or "")),
     }
     model_fields = _NOTE_TYPES_BY_MODEL[note.model].fields
     for name, value in passthrough.items():
@@ -389,6 +396,14 @@ def import_refined_csv(
     if sync:
         client.sync()
     return RefinedImportReport(deck, added, skipped, stored, PRESET_NAME, sync), preset_id
+
+
+def _field(value: str) -> str:
+    return html.escape(value, quote=True)
+
+
+def _csv_text(value: str) -> str:
+    return html.unescape(value)
 
 
 def build_parser() -> argparse.ArgumentParser:

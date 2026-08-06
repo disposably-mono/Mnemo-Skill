@@ -46,6 +46,11 @@ def test_invoke_returns_result():
     assert client.deck_names() == ["Default", "Geography"]
 
 
+def test_client_rejects_non_local_url():
+    with pytest.raises(AnkiConnectError, match="localhost"):
+        AnkiConnect("https://example.com/anki")
+
+
 @responses.activate
 def test_invoke_raises_on_error_field():
     _register({"createDeck": lambda p: None})  # fine
@@ -112,6 +117,38 @@ def test_add_notes_counts_added_and_skipped():
     assert first["modelName"] == "MONO Basic"
     assert first["fields"]["Front"] == "Q"
     assert first["options"]["allowDuplicate"] is False
+
+
+@responses.activate
+def test_add_notes_raises_when_result_length_mismatches():
+    _register({
+        "addNotes": lambda p: [1001],
+        "notesInfo": lambda p: pytest.fail("notesInfo should not be called"),
+    })
+    notes = [
+        AnkiNote(model="MONO Basic", deck="Geo",
+                 fields={"Front": "Q", "Back": "A"}, tags=[]),
+        AnkiNote(model="MONO Basic", deck="Geo",
+                 fields={"Front": "Q2", "Back": "A2"}, tags=[]),
+    ]
+
+    with pytest.raises(AnkiConnectError, match="addNotes returned"):
+        AnkiConnect(URL).add_notes(notes)
+
+
+@responses.activate
+def test_add_notes_raises_when_added_note_id_is_malformed():
+    _register({
+        "addNotes": lambda p: ["9001"],
+        "notesInfo": lambda p: pytest.fail("notesInfo should not be called"),
+    })
+    notes = [
+        AnkiNote(model="MONO Basic", deck="Geo",
+                 fields={"Front": "Q", "Back": "A"}, tags=[]),
+    ]
+
+    with pytest.raises(AnkiConnectError, match="note id"):
+        AnkiConnect(URL).add_notes(notes)
 
 
 @responses.activate
@@ -188,6 +225,22 @@ def test_add_notes_raises_when_notes_info_order_mismatches():
                  fields={"Text": "{{c1::x}}"}, tags=[]),
     ]
     with pytest.raises(AnkiConnectError, match="notesInfo order mismatch"):
+        AnkiConnect(URL).add_notes(notes)
+
+
+@responses.activate
+def test_add_notes_raises_when_notes_info_cards_are_malformed():
+    _register({
+        "addNotes": lambda p: [9001],
+        "notesInfo": lambda p: [{"noteId": 9001, "cards": "7001"}],
+        "changeDeck": lambda p: pytest.fail("changeDeck should not be called"),
+    })
+    notes = [
+        AnkiNote(model="MONO Basic", deck="Geography",
+                 fields={"Front": "Q", "Back": "A"}, tags=[]),
+    ]
+
+    with pytest.raises(AnkiConnectError, match="cards"):
         AnkiConnect(URL).add_notes(notes)
 
 

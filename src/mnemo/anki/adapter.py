@@ -156,54 +156,54 @@ def _placeholders(
     """The substitution values available to a mapping template, by Fact type."""
     content = fact.content
     common = {
-        "source": fact.source or "",
-        "deck": fact.deck,
-        "tags": " ".join(fact.tags),
-        "fact_id": fact.id or "",
-        "knowledge_unit_id": fact.knowledge_unit_id or "",
-        "knowledge_kind": fact.knowledge_kind or "",
-        "objective_ids": " ".join(fact.objective_ids),
-        "prerequisite_ids": " ".join(fact.prerequisite_ids),
-        "origin": fact.origin or "",
-        "confidence": "" if fact.confidence is None else str(fact.confidence),
+        "source": _field(fact.source or ""),
+        "deck": _field(fact.deck),
+        "tags": _field(" ".join(fact.tags)),
+        "fact_id": _field(fact.id or ""),
+        "knowledge_unit_id": _field(fact.knowledge_unit_id or ""),
+        "knowledge_kind": _field(fact.knowledge_kind or ""),
+        "objective_ids": _field(" ".join(fact.objective_ids)),
+        "prerequisite_ids": _field(" ".join(fact.prerequisite_ids)),
+        "origin": _field(fact.origin or ""),
+        "confidence": "" if fact.confidence is None else _field(str(fact.confidence)),
     }
     # Optional per-card annotations shared by every type except image occlusion.
     annotations = {
-        "mnemonic": content.get("mnemonic", ""),
-        "topic": content.get("topic", ""),
+        "mnemonic": _field(content.get("mnemonic", "")),
+        "topic": _field(content.get("topic", "")),
     }
     if fact.type == "qa":
-        return {**common, **annotations, "front": content["front"],
-                "back": content["back"], "extra": content.get("extra", ""),
+        return {**common, **annotations, "front": _field(content["front"]),
+                "back": _field(content["back"]), "extra": _field(content.get("extra", "")),
                 "distractors": _render_confusions(fact)}
     if fact.type == "cloze":
-        return {**common, **annotations, "text": content["text"],
-                "extra": content.get("extra", ""),
+        return {**common, **annotations, "text": _field(content["text"]),
+                "extra": _field(content.get("extra", "")),
                 "distractors": _render_confusions(fact)}
     if fact.type == "list":
-        return {**common, **annotations, "title": content["title"],
+        return {**common, **annotations, "title": _field(content["title"]),
                 "items": _render_list_items(fact),
-                "extra": content.get("extra", "")}
+                "extra": _field(content.get("extra", ""))}
     if fact.type == "typed":
         return {
             **common,
             **annotations,
-            "prompt": content["prompt"],
-            "answer": content["answer"],
+            "prompt": _field(content["prompt"]),
+            "answer": _field(content["answer"]),
             "hints": _render_hints(content.get("hints", [])),
-            "extra": content.get("extra", ""),
+            "extra": _field(content.get("extra", "")),
         }
     return {
         **common,
         "image": (
             f'<img src="{html.escape(image_name, quote=True)}">'
             if image_name is not None
-            else content["image"]
+            else _field(content["image"])
         ),
         "occlusion": _render_occlusions(content),
-        "header": content.get("header", ""),
-        "back_extra": content.get("back_extra", ""),
-        "comments": content.get("comments", ""),
+        "header": _field(content.get("header", "")),
+        "back_extra": _field(content.get("back_extra", "")),
+        "comments": _field(content.get("comments", "")),
     }
 
 
@@ -225,10 +225,10 @@ def _build_qa(
     fact: Fact, media_root: str | Path | None
 ) -> tuple[dict[str, str], list[Path]]:
     return ({
-        "Front": fact.content["front"],
-        "Back": fact.content["back"],
+        "Front": _field(fact.content["front"]),
+        "Back": _field(fact.content["back"]),
         "Distractors": _render_confusions(fact),
-        "Source": fact.source or "",
+        "Source": _field(fact.source or ""),
     }, [])
 
 
@@ -236,10 +236,10 @@ def _build_code(
     fact: Fact, media_root: str | Path | None
 ) -> tuple[dict[str, str], list[Path]]:
     return ({
-        "Front": fact.content["front"],
+        "Front": _field(fact.content["front"]),
         "Code": html.escape(fact.content["back"]),
-        "Extra": fact.content.get("extra", ""),
-        "Source": fact.source or "",
+        "Extra": _field(fact.content.get("extra", "")),
+        "Source": _field(fact.source or ""),
     }, [])
 
 
@@ -247,10 +247,10 @@ def _build_cloze(
     fact: Fact, media_root: str | Path | None
 ) -> tuple[dict[str, str], list[Path]]:
     return ({
-        "Text": fact.content["text"],
-        "Extra": fact.content.get("extra", ""),
+        "Text": _field(fact.content["text"]),
+        "Extra": _field(fact.content.get("extra", "")),
         "Distractors": _render_confusions(fact),
-        "Source": fact.source or "",
+        "Source": _field(fact.source or ""),
     }, [])
 
 
@@ -258,9 +258,9 @@ def _build_list(
     fact: Fact, media_root: str | Path | None
 ) -> tuple[dict[str, str], list[Path]]:
     return ({
-        "Title": fact.content["title"],
+        "Title": _field(fact.content["title"]),
         "Text": _render_list_items(fact),
-        "Source": fact.source or "",
+        "Source": _field(fact.source or ""),
     }, [])
 
 
@@ -270,13 +270,13 @@ def _build_typed(
     content = fact.content
     hints = content.get("hints", [])
     return ({
-        "Prompt": content["prompt"],
-        "Answer": content["answer"],
-        "Hint 1": hints[0] if len(hints) > 0 else "",
-        "Hint 2": hints[1] if len(hints) > 1 else "",
-        "Hint 3": hints[2] if len(hints) > 2 else "",
-        "Extra": content.get("extra", ""),
-        "Source": fact.source or "",
+        "Prompt": _field(content["prompt"]),
+        "Answer": _field(content["answer"]),
+        "Hint 1": _field(hints[0]) if len(hints) > 0 else "",
+        "Hint 2": _field(hints[1]) if len(hints) > 1 else "",
+        "Hint 3": _field(hints[2]) if len(hints) > 2 else "",
+        "Extra": _field(content.get("extra", "")),
+        "Source": _field(fact.source or ""),
     }, [])
 
 
@@ -288,9 +288,9 @@ def _build_image_occlusion(
     return ({
         "Occlusion": _render_occlusions(content),
         "Image": f'<img src="{html.escape(image_path.name, quote=True)}">',
-        "Header": content.get("header", ""),
-        "Back Extra": content.get("back_extra", ""),
-        "Comments": content.get("comments", ""),
+        "Header": _field(content.get("header", "")),
+        "Back Extra": _field(content.get("back_extra", "")),
+        "Comments": _field(content.get("comments", "")),
     }, [image_path])
 
 
@@ -326,7 +326,8 @@ def _render_list_items(fact: Fact) -> str:
     """An overlapping-cloze ``<ol>``: one numbered deletion per list item."""
     items = fact.content["items"]
     lis = "".join(
-        f'<li>{{{{c{i}::{html.escape(item)}}}}}</li>' for i, item in enumerate(items, start=1)
+        f"<li>{{{{c{i}::{_cloze_text(item)}}}}}</li>"
+        for i, item in enumerate(items, start=1)
     )
     return f'<ol class="mono-list">{lis}</ol>'
 
@@ -378,6 +379,14 @@ def _render_confusions(fact: Fact) -> str:
         f"<ul>{body}</ul>"
         "</div>"
     )
+
+
+def _field(value: str) -> str:
+    return html.escape(value, quote=True)
+
+
+def _cloze_text(value: str) -> str:
+    return _field(value).replace("}", "&#125;")
 
 
 _BUILDERS = {

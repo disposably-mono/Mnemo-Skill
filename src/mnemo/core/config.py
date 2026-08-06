@@ -11,6 +11,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_URL = "http://localhost:8765"
 
@@ -83,6 +84,7 @@ def _table(data: dict[str, object], name: str) -> dict[str, object]:
 def _validate_config(config: Config) -> None:
     if not isinstance(config.ankiconnect_url, str) or not config.ankiconnect_url.strip():
         raise ConfigError("anki.ankiconnect_url must be a non-empty string")
+    _validate_ankiconnect_url(config.ankiconnect_url)
     if not isinstance(config.sync_after_import, bool):
         raise ConfigError("anki.sync_after_import must be true or false")
     if not isinstance(config.default_deck, str) or not config.default_deck.strip():
@@ -100,3 +102,12 @@ def _validate_config(config: Config) -> None:
             raise ConfigError(
                 f"target_note_types.{fact_type} must be a non-empty string"
             )
+
+
+def _validate_ankiconnect_url(url: str) -> None:
+    parsed = urlparse(url)
+    local_hosts = {"localhost", "127.0.0.1", "::1"}
+    if parsed.scheme != "http" or parsed.hostname not in local_hosts:
+        raise ConfigError(
+            "anki.ankiconnect_url must be an http URL on localhost, 127.0.0.1, or ::1"
+        )

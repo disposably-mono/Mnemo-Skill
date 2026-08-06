@@ -1,4 +1,5 @@
 import csv
+import json
 
 import pytest
 
@@ -17,6 +18,7 @@ from mnemo.pipeline.import_refined_csv import (
     load_notes,
     row_to_fact,
 )
+from mnemo.pipeline.generate_flashcards import main as generate_main
 
 
 FIELDS = [
@@ -162,6 +164,34 @@ def test_remote_image_url_left_unchanged(tmp_path):
     assert notes[0].fields["ImageURL"] == "https://example.com/diagram.png"
 
 
+def test_remote_image_url_rejects_non_http_scheme(tmp_path):
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+        "ImageURL": "javascript:alert(1)", "ImageAlt": "a diagram",
+    }])
+
+    with pytest.raises(ValueError, match="http"):
+        load_notes(path, "Deck")
+
+
+def test_image_attributes_are_escaped_for_refined_cards(tmp_path):
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Q", "Back": "A", "CardType": "qa", "CardID": "1",
+        "ImageURL": 'https://example.com/a.png?x=1&y="bad"',
+        "ImageAlt": 'quote " and <tag>',
+    }])
+
+    notes, media = load_notes(path, "Deck")
+
+    assert media == []
+    assert notes[0].fields["ImageURL"] == (
+        "https://example.com/a.png?x=1&amp;y=&quot;bad&quot;"
+    )
+    assert notes[0].fields["ImageAlt"] == "quote &quot; and &lt;tag&gt;"
+
+
 def test_refined_basic_and_cloze_templates_render_the_image():
     for note_type in (REFINED_BASIC, REFINED_CLOZE):
         afmt = note_type.templates[0].afmt
@@ -251,11 +281,29 @@ def test_image_supported_card_keeps_back_html(tmp_path):
     notes, media = load_notes(path, "Deck")
 
     assert notes[0].model == BASIC_MODEL
-    assert notes[0].fields["Back"] == back_html
+    assert notes[0].fields["Back"] == (
+        "See &lt;b&gt;the diagram&lt;/b&gt; &amp; label the "
+        "&lt;i&gt;atria&lt;/i&gt;."
+    )
     assert notes[0].fields["CardType"] == "image-supported"
     assert notes[0].fields["ImageURL"] == "diagram.png"
     assert notes[0].fields["ImageAlt"] == "heart diagram"
     assert media == [image]
+
+
+def test_generated_csv_import_escapes_html_once(tmp_path):
+    source = tmp_path / "notes.md"
+    output = tmp_path / "cards.csv"
+    source.write_text("Alpha produces <script>alert(1)</script>.", encoding="utf-8")
+    assert generate_main([
+        str(source), "--output", str(output), "--allow-violations"
+    ]) == 0
+
+    notes, media = load_notes(output, "Deck")
+
+    assert media == []
+    assert notes[0].fields["Back"] == "&lt;script&gt;alert(1)&lt;/script&gt;"
+    assert "&amp;lt;" not in json.dumps(notes[0].fields)
 
 
 class FakeResult:

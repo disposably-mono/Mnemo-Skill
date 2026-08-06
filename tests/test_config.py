@@ -43,6 +43,14 @@ def test_loads_values_from_toml(tmp_path):
     assert cfg.auto_tag == "mnemo"
 
 
+def test_rejects_non_local_ankiconnect_url(tmp_path):
+    toml = tmp_path / "config.toml"
+    toml.write_text('[anki]\nankiconnect_url = "https://example.com/anki"\n')
+
+    with pytest.raises(ConfigError, match="localhost"):
+        load_config(toml)
+
+
 def test_partial_target_note_types_merge_over_defaults(tmp_path):
     toml = tmp_path / "config.toml"
     toml.write_text('[target_note_types]\nqa = "Basic"\n')

@@ -35,10 +35,12 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
     type_counts: Counter[str] = Counter()
     for index, unit in enumerate(units):
         card_type = choose_card_type(unit, index, type_counts)
-        front, back = render_prompt(unit, card_type)
-        if not front.strip() or not back.strip():
+        raw_front, raw_back = render_prompt(unit, card_type)
+        if not raw_front.strip() or not raw_back.strip():
             continue
-        mnemonic = make_mnemonic(unit.group_components or enumerated_components(back))
+        mnemonic = make_mnemonic(unit.group_components or enumerated_components(raw_back))
+        front = _field(raw_front)
+        back = _field(raw_back)
         image_url = unit.image_url
         image_alt = normalize_image_alt(unit.image_alt) if image_url else ""
         if image_url:
@@ -267,12 +269,16 @@ def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> str:
     The context trigger uses the rendered ``front``/``back`` so it matches the
     fields the validator inspects.
     """
-    explanation = unit.extra.strip() or declarative_statement(unit)
+    explanation = _field(unit.extra.strip() or declarative_statement(unit))
+    topic = _field(unit.topic)
+    source = _field(unit.source)
     parts = [f"Explanation: {explanation}"]
     if requires_context(front or unit.text, back or unit.question):
-        parts.append(f"Context: {unit.topic} background is assumed; review {unit.source} if unfamiliar.")
+        parts.append(
+            f"Context: {topic} background is assumed; review {source} if unfamiliar."
+        )
     else:
-        parts.append(f"Context: Topic: {unit.topic}.")
+        parts.append(f"Context: Topic: {topic}.")
     return " ".join(parts)
 
 
@@ -337,6 +343,10 @@ def normalize_image_alt(alt: str) -> str:
 def stable_card_id(front: str, back: str, source: str) -> str:
     digest = hashlib.sha256(f"{front}\0{back}\0{source}".encode()).hexdigest()
     return digest[:16]
+
+
+def _field(value: str) -> str:
+    return html.escape(value, quote=True)
 
 
 def interleave_cards(cards: Sequence[Card], seed: int = DEFAULT_SEED) -> list[Card]:

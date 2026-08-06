@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.adapter import AnkiNote, MappingError
 from mnemo.anki.media import bundled_font_paths, unique_media_paths
 from mnemo.anki.note_types import MONO_NOTE_TYPES, NoteType
 
@@ -94,7 +94,14 @@ def export_apkg(
     decks: dict[str, genanki.Deck] = {}
     count = 0
     for note in notes:
-        note_type = note_types[note.model]  # KeyError on unknown model (by design)
+        try:
+            note_type = note_types[note.model]
+        except KeyError as exc:
+            known = ", ".join(sorted(note_types)) or "(none)"
+            raise MappingError(
+                f"note type {note.model!r} (deck {note.deck!r}) is not among "
+                f"the available note types for export; known note types: {known}"
+            ) from exc
         deck = decks.get(note.deck)
         if deck is None:
             deck = genanki.Deck(deck_id=stable_id(note.deck), name=note.deck)

@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from mnemo.anki.adapter import AnkiNote
+from mnemo.anki.adapter import AnkiNote, MappingError
 from mnemo.anki.genanki_export import (
     ExportResult,
     export_apkg,
@@ -120,7 +120,15 @@ def test_export_handles_cloze_note_type(tmp_path):
 
 def test_export_rejects_unknown_model(tmp_path):
     bad = AnkiNote(model="Nonexistent", deck="X", fields={"a": "b"}, tags=[])
-    with pytest.raises(KeyError):
+    with pytest.raises(MappingError, match="Nonexistent"):
+        export_apkg([bad], tmp_path / "x.apkg")
+
+
+def test_export_unknown_model_error_names_the_offending_deck(tmp_path):
+    # The error should carry enough context (model + deck) to find the
+    # offending note/card, not just a bare KeyError with the dict key.
+    bad = AnkiNote(model="Nonexistent", deck="Culprit Deck", fields={"a": "b"}, tags=[])
+    with pytest.raises(MappingError, match="Culprit Deck"):
         export_apkg([bad], tmp_path / "x.apkg")
 
 

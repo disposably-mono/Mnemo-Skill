@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from scripts.card_schema import FACT_TYPES, Fact
+from mnemo.core.card_schema import FACT_TYPES, Fact
 
 # Default Fact-type -> MONO note type.
 _DEFAULT_MODELS = {

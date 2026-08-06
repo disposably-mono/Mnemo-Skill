@@ -23,8 +23,8 @@ if __package__ in (None, ""):
 
 from scripts.adapter import AnkiNote, MappingError, Mappings, adapt, load_mappings
 from scripts.anki_connect import AnkiConnect, AnkiConnectError
-from scripts.card_schema import CardValidationError, load_facts
-from scripts.config import ConfigError, load_config
+from mnemo.core.card_schema import CardValidationError, load_facts
+from mnemo.core.config import ConfigError, load_config
 from scripts.genanki_export import export_apkg
 from scripts.media import bundled_font_paths, unique_media_paths
 from scripts.note_types import MONO_NOTE_TYPES, NoteType

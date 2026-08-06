@@ -24,7 +24,7 @@ from typing import Sequence
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.knowledge import (
+from mnemo.core.knowledge import (
     KNOWLEDGE_KINDS,
     LEARNING_PURPOSES,
     ORIGINS,
@@ -37,7 +37,7 @@ from scripts.knowledge import (
     objective_label,
     stable_id,
 )
-from scripts.verbatim import (
+from mnemo.core.verbatim import (
     fenced_code_opening,
     is_display_math_delimiter,
     is_fenced_code_closing,

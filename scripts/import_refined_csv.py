@@ -21,7 +21,7 @@ if __package__ in (None, ""):
 
 from scripts.adapter import AnkiNote, Mappings, adapt
 from scripts.anki_connect import AnkiConnect, AnkiConnectError
-from scripts.card_schema import CardValidationError, Fact
+from mnemo.core.card_schema import CardValidationError, Fact
 from scripts.note_types import CardTemplate, MONO_CSS, NoteType
 
 

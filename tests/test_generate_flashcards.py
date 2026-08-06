@@ -628,3 +628,15 @@ def test_requires_context_ignores_plain_prose_but_flags_acronyms_and_keywords():
     assert requires_context("the cat sat") is False
     assert requires_context("DNA carries genetic information.") is True
     assert requires_context("This algorithm sorts the list.") is True
+
+
+def test_declarative_definition_without_question_becomes_reverse_card():
+    source = "Osmosis is the movement of water across a membrane."
+    units = parse_content(source)
+    plan_knowledge(units, source, "membrane.md")
+    cards = build_cards(units)
+    reverse_cards = [card for card in cards if card.card_type == "reverse"]
+
+    assert len(reverse_cards) == 1
+    assert reverse_cards[0].front == "Which term means: the movement of water across a membrane?"
+    assert reverse_cards[0].back == "Osmosis"

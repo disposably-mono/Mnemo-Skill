@@ -93,6 +93,12 @@ def choose_card_type(unit: SourceUnit, index: int, counts: Counter[str]) -> str:
         if reversible_definition(unit) and counts["reverse"] <= counts["qa"] // 2:
             return "reverse"
         return "qa"
+    if (
+        unit.knowledge_kind == "definition"
+        and reversible_definition(unit)
+        and counts["reverse"] <= counts["qa"] // 2
+    ):
+        return "reverse"
     if unit.knowledge_kind in {"definition", "comparison", "mechanism", "argument", "narrative", "exception"}:
         return "qa"
     return "cloze" if meaningful_cloze_candidate(unit.text) else "qa"
@@ -130,6 +136,12 @@ def render_prompt(unit: SourceUnit, card_type: str) -> tuple[str, str]:
         term = definition_term(unit.question)
         if term:
             return f"Which term means: {unit.answer.rstrip('.')}?", term
+    if card_type == "reverse" and not unit.question:
+        definition = _DEFINITION.match(unit.text)
+        if definition:
+            subject = definition.group("subject").strip()
+            object_ = definition.group("object").strip(" .")
+            return f"Which term means: {object_}?", subject
     if card_type == "cloze":
         cloze = make_cloze(unit.text)
         return cloze, answer_from_cloze(cloze)

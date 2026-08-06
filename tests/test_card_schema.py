@@ -1,8 +1,8 @@
-"""Tests for the Fact contract + validation (scripts/card_schema.py)."""
+"""Tests for the Fact contract + validation (mnemo/core/card_schema.py)."""
 
 import pytest
 
-from scripts.card_schema import (
+from mnemo.core.card_schema import (
     CardValidationError,
     Distractor,
     Fact,

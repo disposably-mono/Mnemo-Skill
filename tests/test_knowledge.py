@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.knowledge import (
+from mnemo.core.knowledge import (
     KnowledgeUnit,
     KnowledgeValidationError,
     LearningObjective,

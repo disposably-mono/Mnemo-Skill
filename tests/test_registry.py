@@ -1,11 +1,12 @@
 """Registry consistency: every Fact type is wired everywhere, exactly once.
 
 Adding a new card type must only require touching the canonical registries in
-``scripts.adapter``; these tests fail loudly if any layer falls out of sync.
+``mnemo.anki.adapter``; these tests fail loudly if any layer falls out of sync.
 """
 
-from scripts import adapter, config
-from scripts.card_schema import FACT_TYPES, Fact
+from mnemo.anki import adapter
+from mnemo.core import config
+from mnemo.core.card_schema import FACT_TYPES, Fact
 
 
 # One minimal valid Fact per type (content shapes mirror tests/test_card_schema).

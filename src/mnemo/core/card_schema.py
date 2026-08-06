@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from scripts.knowledge import KNOWLEDGE_KINDS, ORIGINS
-from scripts.verbatim import without_inline_verbatim
+from mnemo.core.knowledge import KNOWLEDGE_KINDS, ORIGINS
+from mnemo.core.verbatim import without_inline_verbatim
 
 FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list", "typed", "image_occlusion")
 GRADES: tuple[str, ...] = ("far", "medium", "near")

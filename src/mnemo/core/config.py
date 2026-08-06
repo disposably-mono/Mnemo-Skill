@@ -14,7 +14,7 @@ from pathlib import Path
 
 # The canonical fact-type -> default-note-type registry lives in the adapter;
 # config aliases it so the two layers can never drift apart.
-from scripts.adapter import _DEFAULT_MODELS as _DEFAULT_TARGETS
+from mnemo.anki.adapter import _DEFAULT_MODELS as _DEFAULT_TARGETS
 
 DEFAULT_URL = "http://localhost:8765"
 

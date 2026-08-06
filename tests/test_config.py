@@ -1,4 +1,4 @@
-"""Tests for runtime config loading (scripts/config.py).
+"""Tests for runtime config loading (mnemo/core/config.py).
 
 config.toml is optional: a missing file yields documented defaults, and a
 partial file overrides only the keys it sets (merged over defaults).
@@ -6,7 +6,7 @@ partial file overrides only the keys it sets (merged over defaults).
 
 import pytest
 
-from scripts.config import Config, ConfigError, load_config
+from mnemo.core.config import Config, ConfigError, load_config
 
 
 def test_defaults_when_no_file(tmp_path):

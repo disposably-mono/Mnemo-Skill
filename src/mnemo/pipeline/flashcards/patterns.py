@@ -18,7 +18,7 @@ _TAGS_LINE = re.compile(r"^Tags?:\s*(.+)$", re.IGNORECASE)
 _OBJECTIVE_HEADER = re.compile(r"^(?:learning\s+)?objectives?\s*:\s*$", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*(?:[-*+] |\d+[.)]\s+)(.+)$")
 _CLOZE = re.compile(r"\{\{c\d+::(.*?)(?:::[^}]*)?\}\}")
-_WORDS = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
+_WORDS = re.compile(r"(?:[^\W\d_]|\d)+(?:[-'](?:[^\W\d_]|\d)+)*")
 _FACT_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
 # Shared relational-verb vocabulary. A narrow list silently drops ordinary
 # declarative facts (e.g. "converts", "forms", "encodes") because render_prompt

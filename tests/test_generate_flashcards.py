@@ -640,3 +640,9 @@ def test_declarative_definition_without_question_becomes_reverse_card():
     assert len(reverse_cards) == 1
     assert reverse_cards[0].front == "Which term means: the movement of water across a membrane?"
     assert reverse_cards[0].back == "Osmosis"
+
+
+def test_word_count_treats_accented_words_as_single_tokens():
+    assert word_count("café") == 1
+    assert word_count("naïve café") == 2
+    assert word_count("well-known it's fine") == 3

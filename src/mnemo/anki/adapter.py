@@ -102,6 +102,13 @@ def adapt(
     configured_target = (target_models or {}).get(fact.type)
     mapping_group = (mappings or {}).get(fact.type, {})
     if configured_target is None and mapping_group:
+        if len(mapping_group) > 1:
+            candidates = ", ".join(sorted(mapping_group))
+            raise MappingError(
+                f"ambiguous mapping for fact type {fact.type!r}: "
+                f"multiple candidate models ({candidates}) and no "
+                "target_note_types entry to disambiguate"
+            )
         configured_target = next(iter(mapping_group))
     model_name = configured_target or (
         "MONO Code" if fact.type == "qa" and "mnemo-verbatim-code" in fact.tags

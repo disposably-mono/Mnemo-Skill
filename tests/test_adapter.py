@@ -471,6 +471,19 @@ def test_image_occlusion_accepts_wellbehaved_relative_path(tmp_path):
     assert note.media == [image.resolve()]
 
 
+def test_ambiguous_mapping_without_target_note_type_raises():
+    """Multiple candidate models for one fact type with no disambiguation must raise."""
+    fact = _qa()
+    mappings = {
+        "qa": {
+            "Basic": {"Front": "{front}", "Back": "{back}"},
+            "Basic (and reversed card)": {"Front": "{front}", "Back": "{back}"},
+        }
+    }
+    with pytest.raises(MappingError, match="ambiguous mapping"):
+        adapt(fact, mappings)
+
+
 # --- HTML escaping tests (Bug fix #8) -----------------------------------------
 
 def test_distractor_text_with_html_special_chars_is_escaped():

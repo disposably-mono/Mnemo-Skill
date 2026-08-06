@@ -33,6 +33,7 @@ Summarize the module in five sentences or fewer.
 
 ## Candidate Cards
 
-- Front: Replace with one atomic recall prompt.
-  Back: Replace with one independently gradable answer.
-  Extra: Explanation: Replace with why the answer is true.
+Q: Replace with one atomic recall prompt.
+A: Replace with one independently gradable answer.
+Extra: Explanation: Replace with why the answer is true.
+Tags: module-tag

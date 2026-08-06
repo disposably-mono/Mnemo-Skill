@@ -7,6 +7,14 @@ this module preserves the historical import surface and console entrypoint.
 
 from __future__ import annotations
 
+from mnemo.pipeline.flashcards.authoring import (
+    AiAuthoringError,
+    CommandAiProvider,
+    DeterministicAuthor,
+    FileAiProvider,
+    JsonAiAuthor,
+    build_authoring_prompt,
+)
 from mnemo.pipeline.flashcards.cli import build_parser, main, parse_steps
 from mnemo.pipeline.flashcards.io import analyze_retention, write_csv, write_json
 from mnemo.pipeline.flashcards.models import (
@@ -87,10 +95,16 @@ __all__ = [
     "GenerationConfig",
     "SourceUnit",
     "Violation",
+    "AiAuthoringError",
+    "CommandAiProvider",
+    "DeterministicAuthor",
+    "FileAiProvider",
+    "JsonAiAuthor",
     "analyze_retention",
     "answer_from_cloze",
     "assign_objectives",
     "atomic_units",
+    "build_authoring_prompt",
     "build_cards",
     "build_extra",
     "build_parser",

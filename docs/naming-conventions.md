@@ -18,6 +18,7 @@ Place course folders under `workspace/courses/<course-slug>/` and module folders
 under `<module-slug>/`. Source file slugs should describe the learning unit, not
 the command that produced the file.
 
-Use the preferred commands `mnemo-ingest`, `mnemo-generate`, `mnemo-audit`,
-`mnemo-import`, and `mnemo-export-note-types`. Compatibility commands remain
-documented, including `python scripts/ingest.py <source>`.
+Use the preferred commands `mnemo-ingest`, `mnemo-cornell`, `mnemo-generate`,
+`mnemo-audit`, `mnemo-ready`, `mnemo-import`, and `mnemo-export-note-types`.
+Compatibility commands remain documented, including `python scripts/ingest.py
+<source>`.

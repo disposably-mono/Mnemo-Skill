@@ -11,7 +11,7 @@ from typing import Sequence
 
 from mnemo.core.verbatim import has_inline_verbatim, without_inline_verbatim
 
-from .models import DEFAULT_SEED, Card, SourceUnit
+from .models import DEFAULT_SEED, MAX_COMPONENTS, Card, SourceUnit
 from .patterns import (
     _ACRONYM,
     _CLOZE,
@@ -20,12 +20,20 @@ from .patterns import (
     _TECHNICAL_KEYWORDS,
     _VERB,
 )
+from .policy import (
+    CLAUSE_MARKER_VERBS,
+    CANDIDATE_CARDS_SECTION,
+    GENERIC_PROMPT_STEMS,
+    MAX_LIST_ITEMS,
+    SEQUENCE_PREFIX_CUES,
+)
 from .text import (
     definition_term,
     enumerated_components,
     has_cloze,
     semantic_tokens,
     slugify,
+    split_list_items,
     strip_html_and_cloze,
     word_count,
 )
@@ -34,11 +42,18 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
     cards: list[Card] = []
     type_counts: Counter[str] = Counter()
     for index, unit in enumerate(units):
+        if unit.question and unit.answer and should_defer_authored_answer(unit.answer):
+            continue
         card_type = choose_card_type(unit, index, type_counts)
         raw_front, raw_back = render_prompt(unit, card_type)
         if not raw_front.strip() or not raw_back.strip():
             continue
-        mnemonic = make_mnemonic(unit.group_components or enumerated_components(raw_back))
+        components = (
+            authored_list_components(unit.answer)
+            if card_type == "list" and unit.answer
+            else unit.group_components or enumerated_components(raw_back)
+        )
+        mnemonic = make_mnemonic(components)
         front = _field(raw_front)
         back = _field(raw_back)
         image_url = unit.image_url
@@ -92,6 +107,10 @@ def choose_card_type(unit: SourceUnit, index: int, counts: Counter[str]) -> str:
     if unit.knowledge_kind == "formula" or exact_answer_candidate(unit.answer):
         return "typed"
     if unit.question:
+        if authored_list_components(unit.answer):
+            return "list"
+        if unit.topic == CANDIDATE_CARDS_SECTION:
+            return "qa"
         if reversible_definition(unit) and counts["reverse"] <= counts["qa"] // 2:
             return "reverse"
         return "qa"
@@ -147,6 +166,8 @@ def render_prompt(unit: SourceUnit, card_type: str) -> tuple[str, str]:
     if card_type == "cloze":
         cloze = make_cloze(unit.text)
         return cloze, answer_from_cloze(cloze)
+    if card_type == "list" and unit.question and unit.answer:
+        return unit.question, render_list_answer(unit.answer)
     if unit.question and unit.answer:
         return unit.question, unit.answer
     formula = re.match(r"^(?P<label>[^=]{1,60}?)\s*=\s*(?P<formula>.+?)\.?$", unit.text)
@@ -206,23 +227,81 @@ def render_semantic_prompt(unit: SourceUnit) -> tuple[str, str] | None:
     return None
 
 
+def answer_exceeds_component_limit(answer: str) -> bool:
+    """True when an authored answer needs a human split before carding."""
+    items = ordered_sequence_components(answer) or split_list_items(answer)
+    return len(items) > MAX_LIST_ITEMS
+
+
+def should_defer_authored_answer(answer: str) -> bool:
+    items = split_list_items(answer)
+    return answer_exceeds_component_limit(answer) or (
+        len(items) >= 3 and not authored_list_components(answer)
+    )
+
+
+def authored_list_components(answer: str) -> list[str]:
+    sequence = ordered_sequence_components(answer)
+    if sequence:
+        return sequence
+    items = split_list_items(answer)
+    if not 3 <= len(items) <= MAX_LIST_ITEMS:
+        return []
+    if sum(looks_like_clause(item) for item in items) >= 2:
+        return []
+    return items
+
+
+def looks_like_clause(value: str) -> bool:
+    marker_pattern = "|".join(re.escape(verb) for verb in CLAUSE_MARKER_VERBS)
+    return bool(
+        re.search(rf"\b(?:{marker_pattern})\b", value, re.I)
+        or re.match(
+            r"^(?:[A-Z][A-Za-z-]+|[a-z]+s|[Tt]he\s+\w+|[Aa]n?\s+\w+)"
+            r"\s+(?:\w+\s+){0,3}(?:\w+ed|laid|made|became|appeared)\b",
+            value.strip(),
+        )
+    )
+
+
+def ordered_sequence_components(answer: str) -> list[str]:
+    match = re.match(r"^(?P<prefix>.+?\bfrom )(?P<body>.+)$", answer.strip(" ."), re.I)
+    if not match:
+        return []
+    if not is_ordered_sequence_prefix(match.group("prefix")):
+        return []
+    body = re.sub(r"\s+to\s+", ", ", match.group("body"), count=1, flags=re.I)
+    if "->" in body:
+        items = [part.strip(" .") for part in body.split("->") if part.strip(" .")]
+    else:
+        items = split_list_items(body)
+    if not 3 <= len(items) <= MAX_LIST_ITEMS:
+        return []
+    return items
+
+
+def is_ordered_sequence_prefix(prefix: str) -> bool:
+    cue_pattern = "|".join(
+        rf"{re.escape(cue)}(?:ed|s|es|ing)?" for cue in SEQUENCE_PREFIX_CUES
+    )
+    return bool(
+        re.search(rf"\b(?:{cue_pattern})\b", prefix, re.I)
+    )
+
+
+def render_list_answer(answer: str) -> str:
+    sequence = ordered_sequence_components(answer)
+    if sequence:
+        prefix = re.match(r"^(?P<prefix>.+?\bfrom )", answer.strip(" ."), re.I)
+        return f"{prefix.group('prefix')}{' -> '.join(sequence)}." if prefix else " -> ".join(sequence)
+    return "; ".join(authored_list_components(answer)) + "."
+
+
 # Stems of low-specificity prompts that recall "what the source says" rather
 # than a concrete fact. The deterministic generator no longer emits these (it
 # defers such units instead), but the auditor keeps the guard so an authored CSV
 # that reintroduces them is caught.
-_GENERIC_PROMPT_STEMS = (
-    "What distinction does the source make",
-    "What sequence does the source give",
-    "Which procedure step is described",
-    "What mechanism does the source explain",
-    "What claim or evidence is presented",
-    "Which event or causal link occurs",
-    "Which example illustrates a concept",
-    "Which exception or qualification applies",
-    "What does the source state about",
-    "What fact should you recall about",
-)
-_GENERIC_PROMPT = re.compile("|".join(re.escape(stem) for stem in _GENERIC_PROMPT_STEMS))
+_GENERIC_PROMPT = re.compile("|".join(re.escape(stem) for stem in GENERIC_PROMPT_STEMS))
 
 
 def is_generic_prompt(front: str) -> bool:
@@ -269,7 +348,10 @@ def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> str:
     The context trigger uses the rendered ``front``/``back`` so it matches the
     fields the validator inspects.
     """
-    explanation = _field(unit.extra.strip() or declarative_statement(unit))
+    explicit_extra = re.sub(
+        r"^Explanation:\s*", "", unit.extra.strip(), flags=re.IGNORECASE
+    )
+    explanation = _field(explicit_extra or declarative_statement(unit))
     topic = _field(unit.topic)
     source = _field(unit.source)
     parts = [f"Explanation: {explanation}"]

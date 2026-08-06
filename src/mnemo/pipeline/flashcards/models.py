@@ -3,7 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+
+from .policy import (
+    DEFAULT_EASE_PERCENT,
+    DEFAULT_EASY_BUTTON_POLICY,
+    DEFAULT_EASY_INTERVAL_DAYS,
+    DEFAULT_GENERATION_SEED,
+    DEFAULT_GRADUATING_INTERVAL_DAYS,
+    DEFAULT_LEARNING_STEPS,
+    DEFAULT_NEW_CARDS_PER_DAY,
+    DEFAULT_SCHEDULER,
+    MAX_COMPONENTS,
+    MAX_FRONT_WORDS,
+)
 
 CSV_FIELDS = (
     "Front",
@@ -26,20 +38,18 @@ CSV_FIELDS = (
     "Confidence",
 )
 CARD_TYPES = ("qa", "cloze", "reverse", "typed", "list", "image-supported")
-MAX_FRONT_WORDS = 19  # Rubric says fewer than 20 words.
-MAX_COMPONENTS = 4
-DEFAULT_SEED = 42
+DEFAULT_SEED = DEFAULT_GENERATION_SEED
 
 @dataclass(frozen=True)
 class GenerationConfig:
-    learning_steps: tuple[str, ...] = ("10m", "1d")
-    graduating_interval_days: int = 3
-    easy_interval_days: int = 7
-    starting_ease_percent: int = 250
-    max_ease_percent: int = 250
-    new_cards_per_day: int = 20
-    scheduler: str = "legacy-sm2"
-    easy_button_policy: str = "avoid"
+    learning_steps: tuple[str, ...] = DEFAULT_LEARNING_STEPS
+    graduating_interval_days: int = DEFAULT_GRADUATING_INTERVAL_DAYS
+    easy_interval_days: int = DEFAULT_EASY_INTERVAL_DAYS
+    starting_ease_percent: int = DEFAULT_EASE_PERCENT
+    max_ease_percent: int = DEFAULT_EASE_PERCENT
+    new_cards_per_day: int = DEFAULT_NEW_CARDS_PER_DAY
+    scheduler: str = DEFAULT_SCHEDULER
+    easy_button_policy: str = DEFAULT_EASY_BUTTON_POLICY
     interleave_topics: bool = True
     seed: int = DEFAULT_SEED
 

@@ -34,6 +34,9 @@ mnemo-import = "mnemo.cli.import_cards:main"
 mnemo-export-note-types = "mnemo.cli.export_note_types:main"
 mnemo-calibrate = "mnemo.cli.calibrate:main"
 mnemo-import-refined-csv = "mnemo.cli.import_refined_csv:main"
+mnemo-ready = "mnemo.cli.ready:main"
+mnemo-workspace = "mnemo.cli.workspace:main"
+mnemo-cornell = "mnemo.cli.cornell:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

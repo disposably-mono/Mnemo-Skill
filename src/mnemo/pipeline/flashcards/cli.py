@@ -16,10 +16,27 @@ from typing import Sequence
 
 from mnemo.core.knowledge import build_coverage_report
 
+from .authoring import (
+    AiAuthoringError,
+    CommandAiProvider,
+    DeterministicAuthor,
+    FileAiProvider,
+    JsonAiAuthor,
+)
 from .io import analyze_retention, write_csv, write_json
-from .models import DEFAULT_SEED, GenerationConfig
+from .models import GenerationConfig
 from .parse import parse_content, plan_knowledge
-from .render import build_cards, interleave_cards
+from .policy import (
+    CANDIDATE_CARDS_SECTION,
+    DEFAULT_EASE_PERCENT,
+    DEFAULT_EASY_INTERVAL_DAYS,
+    DEFAULT_GENERATION_SEED,
+    DEFAULT_GRADUATING_INTERVAL_DAYS,
+    DEFAULT_LEARNING_STEPS,
+    DEFAULT_NEW_CARDS_PER_DAY,
+    DEFAULT_SCHEDULER,
+)
+from .render import interleave_cards
 from .validate import validate_deck
 
 def parse_steps(value: str) -> tuple[str, ...]:
@@ -33,23 +50,83 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Text or Markdown source file.")
     parser.add_argument("--output", type=Path, required=True, help="Output Anki-compatible CSV.")
-    parser.add_argument("--learning-steps", type=parse_steps, default=("10m", "1d"))
-    parser.add_argument("--graduating-interval", type=int, default=3)
-    parser.add_argument("--easy-interval", type=int, default=7)
-    parser.add_argument("--starting-ease", type=int, default=250)
-    parser.add_argument("--max-ease", type=int, default=250)
-    parser.add_argument("--new-cards-per-day", type=int, default=20)
-    parser.add_argument("--scheduler", choices=("legacy-sm2", "fsrs"), default="legacy-sm2")
+    parser.add_argument("--learning-steps", type=parse_steps, default=DEFAULT_LEARNING_STEPS)
+    parser.add_argument("--graduating-interval", type=int, default=DEFAULT_GRADUATING_INTERVAL_DAYS)
+    parser.add_argument("--easy-interval", type=int, default=DEFAULT_EASY_INTERVAL_DAYS)
+    parser.add_argument("--starting-ease", type=int, default=DEFAULT_EASE_PERCENT)
+    parser.add_argument("--max-ease", type=int, default=DEFAULT_EASE_PERCENT)
+    parser.add_argument("--new-cards-per-day", type=int, default=DEFAULT_NEW_CARDS_PER_DAY)
+    parser.add_argument("--scheduler", choices=("legacy-sm2", "fsrs"), default=DEFAULT_SCHEDULER)
     parser.add_argument(
         "--interleave",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Interleave cards across topics.",
     )
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--seed", type=int, default=DEFAULT_GENERATION_SEED)
+    parser.add_argument("--author", choices=("deterministic", "ai"), default="deterministic")
+    parser.add_argument("--ai-response-file", type=Path, help="Read JSON card drafts from a file.")
+    parser.add_argument("--ai-command", help="Command that reads the AI prompt on stdin and writes JSON to stdout.")
     parser.add_argument("--retention-log", type=Path, help="Optional review CSV for the >21-day retention hook.")
+    parser.add_argument(
+        "--section",
+        help=(
+            "Generate only from a Markdown heading section. "
+            f"Cornell notes default to {CANDIDATE_CARDS_SECTION!r} when present."
+        ),
+    )
     parser.add_argument("--allow-violations", action="store_true", help="Exit zero even when rubric errors remain.")
     return parser
+
+
+def selected_source_text(source_text: str, input_path: Path, section: str | None) -> str:
+    requested = section
+    if requested is None and input_path.name.endswith(".cornell.md"):
+        requested = CANDIDATE_CARDS_SECTION
+    if requested is None:
+        return source_text
+    extracted = extract_markdown_section(source_text, requested)
+    if extracted is None:
+        raise ValueError(f"Markdown section not found: {requested}")
+    return extracted
+
+
+def extract_markdown_section(source_text: str, heading: str) -> str | None:
+    target = heading.strip().casefold()
+    lines = source_text.splitlines()
+    start: int | None = None
+    level = 0
+    for index, line in enumerate(lines):
+        match = re.match(r"^(?P<marks>#{1,6})\s+(?P<title>.+?)\s*$", line)
+        if not match:
+            continue
+        current_level = len(match.group("marks"))
+        title = match.group("title").strip().casefold()
+        if start is None and title == target:
+            start = index
+            level = current_level
+            continue
+        if start is not None and current_level <= level:
+            return "\n".join(lines[start:index]).strip() + "\n"
+    if start is None:
+        return None
+    return "\n".join(lines[start:]).strip() + "\n"
+
+
+def build_author(args: argparse.Namespace) -> DeterministicAuthor | JsonAiAuthor:
+    providers = [bool(args.ai_response_file), bool(args.ai_command)]
+    if args.author == "deterministic":
+        if any(providers):
+            raise AiAuthoringError("AI providers require --author ai.")
+        return DeterministicAuthor()
+    if sum(providers) != 1:
+        raise AiAuthoringError("AI authoring requires exactly one of --ai-response-file or --ai-command.")
+    provider = (
+        FileAiProvider(args.ai_response_file)
+        if args.ai_response_file
+        else CommandAiProvider(args.ai_command)
+    )
+    return JsonAiAuthor(provider)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -68,10 +145,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         interleave_topics=args.interleave,
         seed=args.seed,
     )
-    source_text = args.input.read_text(encoding="utf-8")
-    units = parse_content(source_text, args.input.name)
-    objectives, knowledge_units = plan_knowledge(units, source_text, args.input.name)
-    cards = build_cards(units)
+    try:
+        source_text = args.input.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        print(f"Could not read input: {exc}", file=sys.stderr)
+        return 2
+    try:
+        generation_text = selected_source_text(source_text, args.input, args.section)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    units = parse_content(generation_text, args.input.name)
+    objectives, knowledge_units = plan_knowledge(units, generation_text, args.input.name)
+    try:
+        cards = build_author(args).author(units)
+    except AiAuthoringError as exc:
+        print(f"AI authoring failed: {exc}", file=sys.stderr)
+        return 2
     if config.interleave_topics:
         cards = interleave_cards(cards, config.seed)
     violations = validate_deck(cards, config)
@@ -126,4 +216,4 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Manifest: {manifest_path}")
     print(f"Coverage: {coverage_path}")
     print(f"Settings: {settings_path}")
-    return 0 if args.allow_violations or errors == 0 else 2
+    return 0 if args.allow_violations or (errors == 0 and deferred == 0) else 2

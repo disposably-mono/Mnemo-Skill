@@ -21,7 +21,15 @@ from urllib.parse import urlparse
 from mnemo.anki.adapter import AnkiNote, Mappings, adapt
 from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
 from mnemo.core.card_schema import CardValidationError, Fact
+from mnemo.core.config import DEFAULT_URL
 from mnemo.anki.note_types import CardTemplate, MONO_CSS, NoteType
+from mnemo.pipeline.flashcards.policy import (
+    DEFAULT_EASE_PERCENT,
+    DEFAULT_EASY_INTERVAL_DAYS,
+    DEFAULT_GRADUATING_INTERVAL_DAYS,
+    DEFAULT_LEARNING_STEP_DELAYS_MINUTES,
+    DEFAULT_NEW_CARDS_PER_DAY,
+)
 
 
 BASIC_MODEL = "MONO Refined"
@@ -353,10 +361,14 @@ def apply_legacy_preset(client: AnkiConnect, deck: str, preset_id: int | None = 
     if not client._invoke("setDeckConfigId", decks=[deck], configId=preset_id):
         raise AnkiConnectError(f"could not assign preset {preset_id} to {deck}")
     config = client._invoke("getDeckConfig", deck=deck)
-    config["new"]["delays"] = [10.0, 1440.0]
-    config["new"]["ints"] = [3, 7, 0]
-    config["new"]["initialFactor"] = 2500
-    config["new"]["perDay"] = 20
+    config["new"]["delays"] = list(DEFAULT_LEARNING_STEP_DELAYS_MINUTES)
+    config["new"]["ints"] = [
+        DEFAULT_GRADUATING_INTERVAL_DAYS,
+        DEFAULT_EASY_INTERVAL_DAYS,
+        0,
+    ]
+    config["new"]["initialFactor"] = DEFAULT_EASE_PERCENT * 10
+    config["new"]["perDay"] = DEFAULT_NEW_CARDS_PER_DAY
     config["new"]["order"] = 0
     if not client._invoke("saveDeckConfig", config=config):
         raise AnkiConnectError(f"could not save preset for {deck}")
@@ -410,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path)
     parser.add_argument("--deck", required=True)
-    parser.add_argument("--url", default="http://localhost:8765")
+    parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--sync", action="store_true")
     return parser
 

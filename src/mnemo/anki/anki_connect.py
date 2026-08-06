@@ -19,8 +19,8 @@ from urllib.parse import urlparse
 
 from mnemo.anki.adapter import AnkiNote
 from mnemo.anki.note_types import NoteType
+from mnemo.core.config import DEFAULT_URL
 
-DEFAULT_URL = "http://localhost:8765"
 API_VERSION = 6
 _TIMEOUT_S = 10
 

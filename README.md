@@ -101,7 +101,8 @@ Install Mnemo to use these preferred commands:
 
 ```bash
 mnemo-ingest <source>
-mnemo-generate notes.md --output cards/session.csv
+mnemo-cornell normalized-source.md --output notes/session.cornell.md
+mnemo-generate notes/session.cornell.md --output cards/session.csv
 mnemo-audit cards/session.csv --settings cards/session.settings.json
 mnemo-import cards/session.jsonl
 mnemo-export-note-types -o mnemo-note-types.apkg

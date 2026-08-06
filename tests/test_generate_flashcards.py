@@ -19,10 +19,12 @@ from mnemo.pipeline.generate_flashcards import (
     requires_context,
     split_list_items,
     split_sentences,
+    strip_html_and_cloze,
     validate_card,
     validate_deck,
     word_count,
 )
+from mnemo.pipeline.flashcards.policy import CANDIDATE_CARDS_SECTION
 from mnemo.pipeline.audit_cards import build_report
 from mnemo.core.knowledge import extract_explicit_objectives
 
@@ -242,17 +244,16 @@ def test_real_three_item_list_still_splits_and_demands_mnemonic():
     assert any(violation.code == "MISSING_MNEMONIC" for violation in validate_card(card))
 
 
-def test_semicolon_lists_preserve_internal_conjunctions():
+def test_authored_semicolon_answer_stays_one_qa_unit():
     units = parse_content(
         "Q: What are the communication categories?\n"
         "A: Kinesics; Artifacts and Environment; Vocalics or Paralinguistics"
     )
 
-    assert [unit.answer for unit in units] == [
-        "Kinesics",
-        "Artifacts and Environment",
-        "Vocalics or Paralinguistics",
-    ]
+    assert len(units) == 1
+    assert units[0].answer == (
+        "Kinesics; Artifacts and Environment; Vocalics or Paralinguistics"
+    )
 
 
 def test_contrast_and_argument_links_are_not_destroyed_by_atomic_splitting():
@@ -382,6 +383,304 @@ def test_cli_and_independent_auditor(tmp_path):
     assert rows
     assert {"Front", "Back", "Extra", "Mnemonic", "CardType", "Tags"} <= set(rows[0])
     assert {"KnowledgeUnitID", "KnowledgeKind", "ObjectiveIDs", "Origin"} <= set(rows[0])
+
+
+def test_cornell_notes_default_to_candidate_cards_section(tmp_path):
+    source = tmp_path / "module.cornell.md"
+    output = tmp_path / "module.cards.csv"
+    source.write_text(
+        """\
+# Module Cornell Notes
+
+## Notes
+
+Science 11 introduces living systems through many paragraphs that provide
+context but are not intended to become cards.
+Biocultural knowledge includes myths, legends, medicine, agriculture, climate
+reading, and other traditional knowledge.
+
+## Candidate Cards
+
+Q: What perspective frames Science 11 biology?
+A: A complex systems perspective.
+Extra: The module uses systems thinking as the organizing lens.
+Tags: science-11 module-01
+
+Q: What are IKSP?
+A: Traditional knowledge passed across generations.
+Extra: The module uses IKSP for Indigenous Knowledge Systems and Practices.
+Tags: science-11 module-01
+""",
+        encoding="utf-8",
+    )
+
+    assert main([str(source), "--output", str(output)]) == 0
+
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert Counter(row["Front"] for row in rows) == Counter(
+        [
+            "What perspective frames Science 11 biology?",
+            "What are IKSP?",
+        ]
+    )
+    assert {row["Topic"] for row in rows} == {CANDIDATE_CARDS_SECTION}
+    manifest = json.loads(output.with_suffix(".manifest.json").read_text())
+    assert {unit["topic"] for unit in manifest["knowledge_units"]} == {
+        CANDIDATE_CARDS_SECTION
+    }
+
+
+def test_authored_qa_list_answer_becomes_mnemonic_list_card():
+    units = parse_content(
+        """\
+## Candidate Cards
+
+Q: How did oral cultures preserve living-system knowledge?
+A: Through stories, chants, music, visual arts, rituals, and direct teaching.
+Extra: The source describes oral and experiential transmission.
+Tags: science-11
+""",
+        "module.cornell.md",
+    )
+    cards = build_cards(units)
+
+    assert len(cards) == 1
+    assert cards[0].card_type == "list"
+    assert cards[0].front == "How did oral cultures preserve living-system knowledge?"
+    assert cards[0].back == "Through stories; chants; music; visual arts; rituals; direct teaching."
+    assert cards[0].mnemonic == "TCMVRD: Through stories, chants, music, visual arts, rituals, direct teaching"
+    assert not [violation for violation in validate_card(cards[0]) if violation.level == "error"]
+
+
+def test_authored_long_list_answers_are_rendered_as_supported_list_cards(tmp_path):
+    source = tmp_path / "module.cornell.md"
+    output = tmp_path / "module.cards.csv"
+    source.write_text(
+        """\
+## Candidate Cards
+
+Q: What is reductionist science?
+A: Analysis by breaking wholes into parts.
+Extra: The source describes reductionism as a mechanistic approach.
+
+Q: How did oral cultures transmit knowledge about living systems?
+A: Oral cultures transmitted living-systems knowledge through stories, chants, music, visual arts, rituals, and direct experiential teaching.
+Extra: The source describes oral and experiential transmission before written records existed.
+""",
+        encoding="utf-8",
+    )
+
+    assert main([str(source), "--output", str(output)]) == 0
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 2
+    assert {row["CardType"] for row in rows} == {"qa", "list"}
+    manifest = json.loads(output.with_suffix(".manifest.json").read_text())
+    deferred = [unit for unit in manifest["knowledge_units"] if unit["status"] == "deferred"]
+    assert deferred == []
+
+
+def test_authored_long_list_answers_become_list_or_sequence_cards():
+    cards = build_cards(
+        parse_content(
+            """\
+## Candidate Cards
+
+Q: How did oral cultures transmit knowledge about living systems?
+A: Oral cultures transmitted living-systems knowledge through stories, chants, music, visual arts, rituals, and direct experiential teaching.
+Extra: The source describes oral and experiential transmission before written records existed.
+
+Q: What biological knowledge did Sumerian clay tablets preserve?
+A: Sumerian clay tablets preserved medical lore about disease treatment, herbs, animal materials, dentistry, endocrinology, histology, health, and sanitation.
+Extra: The Sumerian section lists these as subjects recorded in cuneiform.
+
+Q: How did reductionism shift the unit of biological analysis?
+A: Reductionism shifted analysis from organism to organ, tissue, cell, organelle, macromolecule, and smaller molecule.
+Extra: The module traces increasing analytical power toward smaller biological units.
+"""
+        )
+    )
+
+    assert [card.card_type for card in cards] == ["list", "list", "list"]
+    assert cards[0].mnemonic == "OCMVRD: Oral cultures transmitted living-systems knowledge through stories, chants, music, visual arts, rituals, direct experiential teaching"
+    assert cards[1].mnemonic == "SHADEHHS: Sumerian clay tablets preserved medical lore about disease treatment, herbs, animal materials, dentistry, endocrinology, histology, health, sanitation"
+    assert cards[2].back == "Reductionism shifted analysis from organism -&gt; organ -&gt; tissue -&gt; cell -&gt; organelle -&gt; macromolecule -&gt; smaller molecule."
+    assert all(not [v for v in validate_card(card) if v.level == "error"] for card in cards)
+
+
+def test_sequence_validation_reads_escaped_arrows_as_text():
+    assert (
+        strip_html_and_cloze("organism -&gt; organ -&gt; tissue")
+        == "organism -> organ -> tissue"
+    )
+
+
+def test_composition_from_list_is_not_rendered_as_ordered_sequence():
+    cards = build_cards(
+        parse_content(
+            """\
+## Candidate Cards
+
+Q: What elements are biomolecules built from?
+A: Biomolecules are built from carbon, hydrogen, oxygen, and nitrogen.
+Extra: The answer is a composition list, not an ordered pathway.
+"""
+        )
+    )
+
+    assert len(cards) == 1
+    assert cards[0].card_type == "list"
+    assert cards[0].back == (
+        "Biomolecules are built from carbon; hydrogen; oxygen; nitrogen."
+    )
+
+
+def test_causal_comma_chain_is_not_rendered_as_list_card():
+    cards = build_cards(
+        parse_content(
+            """\
+## Candidate Cards
+
+Q: What happened in Redi's experiment?
+A: Redi placed meat in jars, flies appeared only where exposed, and spontaneous generation was challenged.
+Extra: The answer is causal rather than a set of parallel members.
+"""
+        )
+    )
+
+    assert cards == []
+
+
+def test_causal_comma_chain_with_other_verbs_is_deferred():
+    cards = build_cards(
+        parse_content(
+            """\
+## Candidate Cards
+
+Q: What happened in Redi's gauze experiment?
+A: Redi covered meat with gauze, flies laid eggs only on exposed meat, and maggots developed from eggs.
+Extra: The answer is causal rather than a set of parallel members.
+"""
+        )
+    )
+
+    assert cards == []
+
+
+def test_list_card_validation_enforces_size_and_matching_mnemonic():
+    oversized = make_card(
+        card_type="list",
+        back="one; two; three; four; five; six; seven; eight; nine.",
+        mnemonic="OTTFFSSEN: one, two, three, four, five, six, seven, eight, nine",
+    )
+    stale_mnemonic = make_card(
+        card_type="list",
+        back="one; two; three; four.",
+        mnemonic="BAD: one, two, three, four",
+    )
+
+    assert "LIST_SIZE" in {violation.code for violation in validate_card(oversized)}
+    assert "MNEMONIC_MISMATCH" in {
+        violation.code for violation in validate_card(stale_mnemonic)
+    }
+
+
+def test_extra_prefix_is_not_duplicated_for_authored_cards():
+    card = build_cards(
+        parse_content(
+            "Q: What is osmosis?\n"
+            "A: Diffusion of water.\n"
+            "Extra: Explanation: Solvent moves across a membrane.\n"
+        )
+    )[0]
+
+    assert card.extra.startswith("Explanation: Solvent moves")
+    assert "Explanation: Explanation:" not in card.extra
+
+
+def test_cli_fails_when_requested_section_is_missing(tmp_path):
+    source = tmp_path / "module.md"
+    output = tmp_path / "module.cards.csv"
+    source.write_text("# Notes\nAlpha is one.\n", encoding="utf-8")
+
+    assert main([str(source), "--output", str(output), "--section", "Candidate Cards"]) == 2
+    assert not output.exists()
+
+
+def test_cornell_file_without_candidate_cards_fails_fast(tmp_path):
+    source = tmp_path / "module.cornell.md"
+    output = tmp_path / "module.cards.csv"
+    source.write_text("# Cornell\n## Notes\nAlpha is one.\n", encoding="utf-8")
+
+    assert main([str(source), "--output", str(output)]) == 2
+    assert not output.exists()
+
+
+def test_generate_reports_bad_encoding_without_traceback(tmp_path):
+    source = tmp_path / "bad.cornell.md"
+    output = tmp_path / "bad.cards.csv"
+    source.write_bytes(b"\xff\xfe\x00")
+
+    assert main([str(source), "--output", str(output)]) == 2
+    assert not output.exists()
+
+
+def test_cli_ai_response_file_generates_validated_cards(tmp_path):
+    source = tmp_path / "module.md"
+    output = tmp_path / "module.cards.csv"
+    response = tmp_path / "ai-response.json"
+    source_text = "ATP synthase uses a proton gradient.\n"
+    units = parse_content(source_text, source.name)
+    plan_knowledge(units, source_text, source.name)
+    source.write_text(source_text, encoding="utf-8")
+    response.write_text(
+        json.dumps(
+            {
+                "cards": [
+                    {
+                        "front": "What does ATP synthase use?",
+                        "back": "A proton gradient.",
+                        "extra": (
+                            "Explanation: The source states ATP synthase uses a proton gradient. "
+                            "Context: ATP synthase is an enzyme in cellular energy conversion."
+                        ),
+                        "card_type": "qa",
+                        "source_unit_id": units[0].knowledge_unit_id,
+                        "evidence": "ATP synthase uses a proton gradient.",
+                        "tags": ["bio"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(
+        [
+            str(source),
+            "--output",
+            str(output),
+            "--author",
+            "ai",
+            "--ai-response-file",
+            str(response),
+        ]
+    ) == 0
+
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["Front"] == "What does ATP synthase use?"
+    assert "ai-authored" in rows[0]["Tags"]
+
+
+def test_cli_ai_mode_requires_one_provider_before_writing_output(tmp_path):
+    source = tmp_path / "module.md"
+    output = tmp_path / "module.cards.csv"
+    source.write_text("Water is H2O.\n", encoding="utf-8")
+
+    assert main([str(source), "--output", str(output), "--author", "ai"]) == 2
+    assert not output.exists()
 
 
 def test_semantic_planning_classifies_mixed_knowledge_and_objectives():

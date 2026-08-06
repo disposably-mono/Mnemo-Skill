@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 
 from mnemo.core.verbatim import (
@@ -19,6 +20,7 @@ from .patterns import (
     _WHAT_MEANS,
     _WORDS,
 )
+from .policy import MAX_LIST_ITEM_WORDS, SEMANTIC_STOPWORDS, SENTENCE_ABBREVIATIONS
 
 def word_count(text: str) -> int:
     return len(_WORDS.findall(strip_html_and_cloze(text)))
@@ -27,7 +29,7 @@ def word_count(text: str) -> int:
 def strip_html_and_cloze(text: str) -> str:
     text = without_inline_verbatim(text)
     text = _CLOZE.sub(lambda match: match.group(1), text)
-    return re.sub(r"<[^>]+>", " ", text)
+    return html.unescape(re.sub(r"<[^>]+>", " ", text))
 
 
 def has_cloze(text: str) -> bool:
@@ -42,15 +44,10 @@ def slugify(value: str) -> str:
 
 
 def semantic_tokens(value: str) -> set[str]:
-    stopwords = {
-        "and", "the", "this", "that", "with", "from", "into", "what", "when",
-        "where", "which", "able", "students", "learners", "explain", "identify",
-        "understand", "describe", "apply",
-    }
     return {
         token.casefold()
         for token in _WORDS.findall(value)
-        if len(token) > 2 and token.casefold() not in stopwords
+        if len(token) > 2 and token.casefold() not in SEMANTIC_STOPWORDS
     }
 
 
@@ -69,14 +66,7 @@ def parse_tags(value: str) -> list[str]:
 
 # Tokens that end with a period but do not end a sentence. Without this guard,
 # "e.g.", "U.S.", "Fig. 3", and single-letter initials fragment ordinary prose.
-_ABBREVIATIONS = frozenset(
-    {
-        "e.g", "i.e", "etc", "vs", "al", "cf", "approx", "no", "fig", "eq",
-        "dr", "mr", "mrs", "ms", "prof", "st", "mt", "u.s", "u.k", "ph.d",
-        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct",
-        "nov", "dec",
-    }
-)
+_ABBREVIATIONS = SENTENCE_ABBREVIATIONS
 
 
 def split_sentences(text: str) -> list[str]:
@@ -119,7 +109,7 @@ def split_list_items(text: str) -> list[str]:
         normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", protected, flags=re.IGNORECASE)
         items = [part.strip(" .") for part in normalized.split(",") if part.strip(" .")]
     items = [restore_inline_verbatim(item.replace("\x00", ","), spans) for item in items]
-    if len(items) < 2 or any(word_count(item) > 12 for item in items):
+    if len(items) < 2 or any(word_count(item) > MAX_LIST_ITEM_WORDS for item in items):
         return []
     return items
 

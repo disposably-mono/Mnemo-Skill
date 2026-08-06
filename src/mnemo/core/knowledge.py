@@ -12,6 +12,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
+from .knowledge_policy import KNOWLEDGE_KIND_CUES
+
 
 KNOWLEDGE_KINDS = (
     "fact",
@@ -156,41 +158,48 @@ def classify_knowledge(text: str, question: str = "") -> tuple[str, str]:
     value = f"{question} {text}".strip()
     lower = value.casefold()
 
-    if re.search(r"\b(?:example|for example|for instance|such as)\b", lower):
+    if has_cue(lower, "example"):
         return "example", "interpret"
-    if re.search(r"\b(?:except|exception|unless|however|but not|only when)\b", lower):
+    if has_cue(lower, "exception"):
         return "exception", "discriminate"
-    if re.search(r"\b(?:calculate|compute|solve|apply|given that|scenario)\b", lower):
+    if has_cue(lower, "application"):
         return "application", "apply"
-    if re.search(r"\b(?:derive|derivation|prove|proof)\b", lower):
+    if has_cue(lower, "derivation"):
         return "derivation", "derive"
     if _looks_like_formula(value):
         return "formula", "apply"
-    if re.search(r"\b(?:claim|evidence|premise|conclusion|argues?|therefore|objection)\b", lower):
+    if has_cue(lower, "argument"):
         return "argument", "interpret"
-    if re.search(r"\b(?:steps?|procedure|instructions?|how to)\b", lower):
+    if has_cue(lower, "procedure"):
         return "procedure", "sequence"
-    if re.search(r"\b(?:first|second|third|finally|stage|phase)\b", lower):
+    if has_cue(lower, "ordered-process"):
         return "ordered-process", "sequence"
-    if re.search(r"\b(?:before|after|then|eventually|turning point|protagonist)\b", lower):
+    if has_cue(lower, "narrative"):
         return "narrative", "sequence"
-    if re.search(r"\b(?:versus|compared with|differs? from|whereas|unlike|similar)\b", lower):
+    if has_cue(lower, "comparison"):
         return "comparison", "discriminate"
-    if re.search(r"\b(?:because|causes?|results? in|leads? to|thereby|through which)\b", lower):
+    if has_cue(lower, "mechanism"):
         return "mechanism", "explain"
-    if re.search(r"\b(?:includes?|contains?|consists of|types? of|categories of)\b", lower):
+    if has_cue(lower, "taxonomy"):
         return "taxonomy", "recall"
-    if re.search(r"\b(?:is defined as|means|refers to|what is|define)\b", lower) or re.match(
+    if has_cue(lower, "definition") or re.match(
         r"^[^.!?]{1,80}\s+is\s+[^.!?]+[.!?]?$", value, re.IGNORECASE
     ):
         return "definition", "recall"
-    if re.search(r"\b(?:is|are|has|have|uses?|produces?|requires?|prevents?|allows?)\b", lower):
+    if has_cue(lower, "relation"):
         return "relation", "recall"
     return "fact", "recall"
 
 
+def has_cue(text: str, group: str) -> bool:
+    return any(
+        re.search(rf"\b{re.escape(cue)}\b", text)
+        for cue in KNOWLEDGE_KIND_CUES[group]
+    )
+
+
 def _looks_like_formula(text: str) -> bool:
-    if re.search(r"\b(?:formula|equation|equals?|ratio|rate|percentage)\b", text, re.I):
+    if has_cue(text.casefold(), "formula"):
         return True
     return bool(
         re.search(r"(?:[A-Za-z][A-Za-z0-9_]*|\d+)\s*=\s*[^=]", text)

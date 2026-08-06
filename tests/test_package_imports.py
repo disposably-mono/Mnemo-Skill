@@ -32,6 +32,9 @@ def test_console_scripts_are_declared():
     assert "mnemo-audit" in scripts
     assert "mnemo-import" in scripts
     assert "mnemo-export-note-types" in scripts
+    assert "mnemo-ready" in scripts
+    assert "mnemo-workspace" in scripts
+    assert "mnemo-cornell" in scripts
 
 
 @pytest.mark.parametrize(
@@ -42,6 +45,9 @@ def test_console_scripts_are_declared():
         ("mnemo.cli.audit", "mnemo.pipeline.audit_cards"),
         ("mnemo.cli.import_cards", "mnemo.pipeline.import_cards"),
         ("mnemo.cli.export_note_types", "mnemo.pipeline.export_note_types"),
+        ("mnemo.cli.ready", "mnemo.pipeline.ready"),
+        ("mnemo.cli.workspace", "mnemo.pipeline.workspace"),
+        ("mnemo.cli.cornell", "mnemo.pipeline.cornell"),
     ],
 )
 def test_cli_entrypoints_reexport_pipeline_main(cli_module, pipeline_module):
@@ -61,6 +67,9 @@ def test_cli_entrypoints_reexport_pipeline_main(cli_module, pipeline_module):
         "scripts/import_cards.py",
         "scripts/export_note_types.py",
         "scripts/import_refined_csv.py",
+        "scripts/ready.py",
+        "scripts/workspace.py",
+        "scripts/cornell.py",
     ],
 )
 def test_direct_script_help_works_without_site_packages(script):

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from .policy import TECHNICAL_KEYWORDS
+
 _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 _IMAGE_MD = re.compile(r"!\[([^]]*)\]\(([^)\s]+)(?:\s+['\"][^'\"]*['\"])?\)")
 _IMAGE_DIRECTIVE = re.compile(
@@ -52,7 +54,6 @@ _LIST_STATEMENT = re.compile(
 # acronyms. Folding this under IGNORECASE would match any 2+ letter word.
 _ACRONYM = re.compile(r"\b[A-Z]{2,}\b")
 _TECHNICAL_KEYWORDS = re.compile(
-    r"\b(?:theorem|algorithm|enzyme|protocol|doctrine|statute|"
-    r"coefficient|derivative|mitosis|syntax|jurisdiction)\b",
+    rf"\b(?:{'|'.join(re.escape(keyword) for keyword in TECHNICAL_KEYWORDS)})\b",
     re.IGNORECASE,
 )

@@ -258,7 +258,7 @@ def parse_content(text: str, source_name: str = "input") -> list[SourceUnit]:
                     image_url=image_url,
                     image_alt=image_alt,
                 )
-                units.extend(atomic_units(base))
+                units.append(base)
                 pending_image = None
                 index = lookahead
                 continue

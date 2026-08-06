@@ -21,6 +21,7 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 /skill/
+.worktrees/
 
 # Project runtime output
 cards/*

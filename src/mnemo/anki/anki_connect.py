@@ -204,10 +204,30 @@ class AnkiConnect:
             self._invoke("changeDeck", cards=ids, deck=deck)
 
     def _pin_decks(self, added_notes: list[tuple[AnkiNote, int]]) -> None:
-        """Force each freshly-added note's cards into its note's target deck."""
+        """Force each freshly-added note's cards into its note's target deck.
+
+        Relies on AnkiConnect preserving request/response ordering between the
+        ``notes`` argument sent to ``notesInfo`` and the list it returns. That
+        ordering is documented AnkiConnect behavior, but we verify it defensively
+        rather than trusting it blindly: a length mismatch or reordered/missing
+        note id would otherwise silently pin cards to the wrong deck.
+        """
         if not added_notes:
             return
-        infos = self._invoke("notesInfo", notes=[nid for _, nid in added_notes])
+        requested_ids = [nid for _, nid in added_notes]
+        infos = self._invoke("notesInfo", notes=requested_ids)
+        if len(infos) != len(added_notes):
+            raise AnkiConnectError(
+                f"notesInfo returned {len(infos)} entries for "
+                f"{len(added_notes)} requested notes; cannot safely pin decks"
+            )
+        for expected_id, info in zip(requested_ids, infos):
+            actual_id = info.get("noteId")
+            if actual_id != expected_id:
+                raise AnkiConnectError(
+                    f"notesInfo order mismatch: expected note {expected_id} but "
+                    f"got {actual_id!r}; cannot safely pin decks"
+                )
         cards_by_deck: dict[str, list[int]] = {}
         for (note, _nid), info in zip(added_notes, infos):
             cards_by_deck.setdefault(note.deck, []).extend(info.get("cards", []))

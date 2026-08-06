@@ -93,7 +93,7 @@ def test_add_notes_counts_added_and_skipped():
         return [1001, None]
     _register({
         "addNotes": add_notes,
-        "notesInfo": lambda p: [{"cards": [5001]}],
+        "notesInfo": lambda p: [{"noteId": 1001, "cards": [5001]}],
         "changeDeck": lambda p: None,
     })
 
@@ -121,7 +121,10 @@ def test_add_notes_pins_new_cards_to_their_target_decks():
     changed = []
     def notes_info(payload):
         # AnkiConnect returns card ids per requested note, in order.
-        return [{"cards": [7001]}, {"cards": [7002, 7003]}]
+        return [
+            {"noteId": 9001, "cards": [7001]},
+            {"noteId": 9002, "cards": [7002, 7003]},
+        ]
     def change_deck(payload):
         changed.append((tuple(payload["params"]["cards"]), payload["params"]["deck"]))
         return None
@@ -143,6 +146,49 @@ def test_add_notes_pins_new_cards_to_their_target_decks():
     # Each note's cards land in that note's deck (grouped per deck).
     assert ((7001,), "Geography") in changed
     assert ((7002, 7003), "Chemistry::Basics") in changed
+
+
+@responses.activate
+def test_add_notes_raises_when_notes_info_length_mismatches():
+    # Defensive check: if notesInfo doesn't return one entry per requested note,
+    # we cannot safely assume positional correspondence -> raise instead of
+    # mis-pinning decks.
+    _register({
+        "addNotes": lambda p: [9001, 9002],
+        "notesInfo": lambda p: [{"noteId": 9001, "cards": [7001]}],  # missing one
+        "changeDeck": lambda p: pytest.fail("changeDeck should not be called"),
+    })
+    notes = [
+        AnkiNote(model="MONO Basic", deck="Geography",
+                 fields={"Front": "Q", "Back": "A"}, tags=[]),
+        AnkiNote(model="MONO Cloze", deck="Chemistry::Basics",
+                 fields={"Text": "{{c1::x}}"}, tags=[]),
+    ]
+    with pytest.raises(AnkiConnectError, match="notesInfo returned"):
+        AnkiConnect(URL).add_notes(notes)
+
+
+@responses.activate
+def test_add_notes_raises_when_notes_info_order_mismatches():
+    # Defensive check: if notesInfo's noteId doesn't match the note id at that
+    # position, the response is out of order relative to the request -> raise
+    # instead of silently pinning cards to the wrong deck.
+    _register({
+        "addNotes": lambda p: [9001, 9002],
+        "notesInfo": lambda p: [
+            {"noteId": 9002, "cards": [7002, 7003]},  # swapped order
+            {"noteId": 9001, "cards": [7001]},
+        ],
+        "changeDeck": lambda p: pytest.fail("changeDeck should not be called"),
+    })
+    notes = [
+        AnkiNote(model="MONO Basic", deck="Geography",
+                 fields={"Front": "Q", "Back": "A"}, tags=[]),
+        AnkiNote(model="MONO Cloze", deck="Chemistry::Basics",
+                 fields={"Text": "{{c1::x}}"}, tags=[]),
+    ]
+    with pytest.raises(AnkiConnectError, match="notesInfo order mismatch"):
+        AnkiConnect(URL).add_notes(notes)
 
 
 @responses.activate

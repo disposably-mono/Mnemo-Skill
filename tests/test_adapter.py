@@ -399,6 +399,78 @@ def test_mapped_image_occlusion_keeps_media_upload(tmp_path):
     assert note.media == [image]
 
 
+def test_image_occlusion_rejects_absolute_image_path(tmp_path):
+    """An absolute image path in an ingested Fact must be rejected outright."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.png"
+    secret.write_bytes(b"secret")
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": str(secret),
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.3, "height": 0.1},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    with pytest.raises(ValueError, match="relative to media_root"):
+        adapt(fact, media_root=media_root)
+
+
+def test_image_occlusion_rejects_path_traversal_outside_media_root(tmp_path):
+    """A relative image path with ``..`` segments escaping media_root is rejected."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.png"
+    secret.write_bytes(b"secret")
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": "../outside/secret.png",
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.3, "height": 0.1},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    with pytest.raises(ValueError, match="escapes media_root"):
+        adapt(fact, media_root=media_root)
+
+
+def test_image_occlusion_accepts_wellbehaved_relative_path(tmp_path):
+    """A legitimate relative path under media_root still resolves and adapts."""
+    media_root = tmp_path / "media"
+    subdir = media_root / "diagrams"
+    subdir.mkdir(parents=True)
+    image = subdir / "heart.png"
+    image.write_bytes(b"image")
+    fact = Fact.from_dict({
+        "type": "image_occlusion",
+        "content": {
+            "image": "diagrams/heart.png",
+            "masks": [
+                {"shape": "rect", "left": 0.1, "top": 0.2,
+                 "width": 0.3, "height": 0.1},
+            ],
+        },
+        "deck": "Anatomy",
+        "tags": [],
+    })
+    note = adapt(fact, media_root=media_root)
+    assert note.fields["Image"] == '<img src="heart.png">'
+    assert note.media == [image.resolve()]
+
+
 # --- HTML escaping tests (Bug fix #8) -----------------------------------------
 
 def test_distractor_text_with_html_special_chars_is_escaped():

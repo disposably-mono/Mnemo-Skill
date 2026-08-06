@@ -291,9 +291,28 @@ def _build_image_occlusion(
 
 
 def _resolve_image_path(fact: Fact, media_root: str | Path | None) -> Path:
-    image_path = Path(fact.content["image"])
-    if not image_path.is_absolute() and media_root is not None:
+    """Resolve the ``image`` reference from an untrusted Fact under ``media_root``.
+
+    ``fact.content["image"]`` comes from ingested JSONL data and must never be
+    trusted to stay inside ``media_root``: absolute paths and ``..`` segments
+    are rejected so a crafted Fact can't pull an arbitrary local file into the
+    Anki media collection.
+    """
+    raw_image = fact.content["image"]
+    image_path = Path(raw_image)
+    if image_path.is_absolute():
+        raise ValueError(
+            f"image occlusion media path must be relative to media_root: {raw_image!r}"
+        )
+    if media_root is not None:
         image_path = Path(media_root) / image_path
+        resolved_root = Path(media_root).resolve()
+        resolved_image = image_path.resolve()
+        if not resolved_image.is_relative_to(resolved_root):
+            raise ValueError(
+                f"image occlusion media path escapes media_root: {raw_image!r}"
+            )
+        image_path = resolved_image
     if not image_path.is_file():
         raise FileNotFoundError(f"image occlusion media not found: {image_path}")
     return image_path

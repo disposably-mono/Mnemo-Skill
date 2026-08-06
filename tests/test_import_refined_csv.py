@@ -3,7 +3,7 @@ import csv
 import pytest
 
 from mnemo.core.card_schema import CardValidationError
-from scripts.import_refined_csv import (
+from mnemo.pipeline.import_refined_csv import (
     BASIC_MODEL,
     CLOZE_MODEL,
     PRESET_NAME,

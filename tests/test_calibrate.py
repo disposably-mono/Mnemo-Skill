@@ -1,7 +1,7 @@
 import csv
 import json
 
-from scripts.calibrate import build_report, main
+from mnemo.pipeline.calibrate import build_report, main
 
 
 APPROVAL_FIELDS = ("card_id", "decision", "edited_fields", "reason")

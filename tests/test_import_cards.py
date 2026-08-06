@@ -15,7 +15,7 @@ import pytest
 
 from mnemo.anki.anki_connect import AddResult
 from mnemo.core.card_schema import Fact, dump_facts
-from scripts.import_cards import (
+from mnemo.pipeline.import_cards import (
     ImportReport,
     _format_summary,
     import_cards,

@@ -1,5 +1,5 @@
-"""Temporary CLI entrypoint."""
+"""Command-line entrypoint for card import."""
 
+from mnemo.pipeline.import_cards import main
 
-def main(argv: list[str] | None = None) -> int:
-    raise SystemExit("Mnemo CLI entrypoint is not wired yet")
+__all__ = ["main"]

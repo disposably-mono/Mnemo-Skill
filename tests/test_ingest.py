@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ingest import Chunk, _extract_pdf_math, ingest
+from mnemo.pipeline.ingest import Chunk, _extract_pdf_math, ingest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -161,7 +161,7 @@ def test_ocr_flag_falls_back_to_marker_when_ocr_unavailable(tmp_path):
 def test_ocr_recovered_text_is_labeled_in_provenance(tmp_path, monkeypatch):
     # When OCR succeeds, the recovered text is emitted with an (OCR) provenance
     # tag so downstream grounding can treat it as lower confidence.
-    import scripts.ingest as ingest_mod
+    import mnemo.pipeline.ingest as ingest_mod
 
     pdf = tmp_path / "scanned.pdf"
     _image_only_pdf(pdf)

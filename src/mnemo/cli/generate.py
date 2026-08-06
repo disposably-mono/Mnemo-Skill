@@ -1,5 +1,5 @@
-"""Temporary CLI entrypoint."""
+"""Command-line entrypoint for flashcard generation."""
 
+from mnemo.pipeline.generate_flashcards import main
 
-def main(argv: list[str] | None = None) -> int:
-    raise SystemExit("Mnemo CLI entrypoint is not wired yet")
+__all__ = ["main"]

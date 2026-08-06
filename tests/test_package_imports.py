@@ -29,23 +29,29 @@ def test_console_scripts_are_declared():
 
 
 @pytest.mark.parametrize(
-    "main",
+    ("cli_module", "pipeline_module"),
     [
-        __import__("mnemo.cli.ingest", fromlist=["main"]).main,
-        __import__("mnemo.cli.generate", fromlist=["main"]).main,
-        __import__("mnemo.cli.audit", fromlist=["main"]).main,
-        __import__("mnemo.cli.import_cards", fromlist=["main"]).main,
-        __import__("mnemo.cli.export_note_types", fromlist=["main"]).main,
+        ("mnemo.cli.ingest", "mnemo.pipeline.ingest"),
+        ("mnemo.cli.generate", "mnemo.pipeline.generate_flashcards"),
+        ("mnemo.cli.audit", "mnemo.pipeline.audit_cards"),
+        ("mnemo.cli.import_cards", "mnemo.pipeline.import_cards"),
+        ("mnemo.cli.export_note_types", "mnemo.pipeline.export_note_types"),
     ],
 )
-def test_temporary_cli_entrypoints_explain_they_are_not_wired(main):
-    with pytest.raises(SystemExit, match="Mnemo CLI entrypoint is not wired yet"):
-        main()
+def test_cli_entrypoints_reexport_pipeline_main(cli_module, pipeline_module):
+    cli = __import__(cli_module, fromlist=["main"])
+    pipeline = __import__(pipeline_module, fromlist=["main"])
+
+    assert cli.main is pipeline.main
 
 
 @pytest.mark.parametrize(
     "script",
     [
+        "scripts/ingest.py",
+        "scripts/generate_flashcards.py",
+        "scripts/audit_cards.py",
+        "scripts/calibrate.py",
         "scripts/import_cards.py",
         "scripts/export_note_types.py",
         "scripts/import_refined_csv.py",

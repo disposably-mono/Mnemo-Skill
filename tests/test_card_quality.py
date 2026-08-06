@@ -1,7 +1,7 @@
 import csv
 import json
 
-from scripts.audit_cards import build_report, main, print_report
+from mnemo.pipeline.audit_cards import build_report, main, print_report
 
 
 CARD_FIELDS = ("Front", "Back", "Extra", "Mnemonic", "CardType", "Tags")

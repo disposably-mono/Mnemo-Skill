@@ -17,7 +17,7 @@ from mnemo.anki.genanki_export import (
     stable_id,
     to_genanki_note,
 )
-from scripts.import_refined_csv import REFINED_BASIC
+from mnemo.pipeline.import_refined_csv import REFINED_BASIC
 from mnemo.anki.note_types import MONO_BASIC, MONO_CLOZE
 
 

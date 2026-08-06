@@ -2,7 +2,7 @@ import csv
 import json
 from collections import Counter
 
-from scripts.generate_flashcards import (
+from mnemo.pipeline.generate_flashcards import (
     Card,
     GenerationConfig,
     analyze_retention,
@@ -21,8 +21,8 @@ from scripts.generate_flashcards import (
     validate_deck,
     word_count,
 )
-from scripts.audit_cards import build_report
-from scripts.knowledge import extract_explicit_objectives
+from mnemo.pipeline.audit_cards import build_report
+from mnemo.core.knowledge import extract_explicit_objectives
 
 
 def _texts(units):

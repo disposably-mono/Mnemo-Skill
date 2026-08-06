@@ -7,7 +7,7 @@ produced package (a real zip) without a live Anki.
 
 import zipfile
 
-from scripts.export_note_types import export_note_types, main
+from mnemo.pipeline.export_note_types import export_note_types, main
 
 
 def test_exports_a_valid_apkg_with_one_example_per_mono_type(tmp_path):

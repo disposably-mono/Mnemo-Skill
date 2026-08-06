@@ -19,14 +19,11 @@ from typing import Any
 
 from mnemo.core.card_schema import FACT_TYPES, Fact
 
-# Default Fact-type -> MONO note type.
-_DEFAULT_MODELS = {
-    "qa": "MONO Basic",
-    "cloze": "MONO Cloze",
-    "list": "MONO Overlapping",
-    "typed": "MONO Type",
-    "image_occlusion": "Image Occlusion",
-}
+# Default Fact-type -> MONO note type. The registry lives in core.config
+# (config-shaped data); the adapter imports it from there rather than
+# defining its own copy, keeping the anki layer dependent on core, not the
+# other way around.
+from mnemo.core.config import DEFAULT_FACT_TARGETS as _DEFAULT_MODELS
 
 # Order matters: render the most plausible (near) confusions first.
 _GRADE_ORDER = ("near", "medium", "far")

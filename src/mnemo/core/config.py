@@ -12,11 +12,18 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# The canonical fact-type -> default-note-type registry lives in the adapter;
-# config aliases it so the two layers can never drift apart.
-from mnemo.anki.adapter import _DEFAULT_MODELS as _DEFAULT_TARGETS
-
 DEFAULT_URL = "http://localhost:8765"
+
+# The canonical fact-type -> default-note-type registry. This is config-shaped
+# data owned by core.config; the anki adapter imports it from here (never the
+# other way around) so ingestion/config stay independent of the anki backend.
+DEFAULT_FACT_TARGETS = {
+    "qa": "MONO Basic",
+    "cloze": "MONO Cloze",
+    "list": "MONO Overlapping",
+    "typed": "MONO Type",
+    "image_occlusion": "Image Occlusion",
+}
 
 
 class ConfigError(ValueError):
@@ -32,7 +39,7 @@ class Config:
     default_deck: str = "Inbox"
     auto_tag: str = "auto"
     target_note_types: dict[str, str] = field(
-        default_factory=lambda: dict(_DEFAULT_TARGETS)
+        default_factory=lambda: dict(DEFAULT_FACT_TARGETS)
     )
 
 
@@ -58,7 +65,7 @@ def load_config(path: str | Path | None) -> Config:
         default_deck=decks.get("default_deck", defaults.default_deck),
         auto_tag=tags.get("auto_tag", defaults.auto_tag),
         target_note_types={
-            **_DEFAULT_TARGETS,
+            **DEFAULT_FACT_TARGETS,
             **targets,
         },
     )
@@ -87,7 +94,7 @@ def _validate_config(config: Config) -> None:
     ):
         raise ConfigError("tags.auto_tag must be one non-empty Anki tag")
     for fact_type, model in config.target_note_types.items():
-        if fact_type not in _DEFAULT_TARGETS:
+        if fact_type not in DEFAULT_FACT_TARGETS:
             raise ConfigError(f"unknown target fact type: {fact_type!r}")
         if not isinstance(model, str) or not model.strip():
             raise ConfigError(

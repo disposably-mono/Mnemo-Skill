@@ -1,7 +1,8 @@
 """Registry consistency: every Fact type is wired everywhere, exactly once.
 
 Adding a new card type must only require touching the canonical registries in
-``mnemo.anki.adapter``; these tests fail loudly if any layer falls out of sync.
+``mnemo.core.config`` (default targets) and ``mnemo.anki.adapter`` (builders);
+these tests fail loudly if any layer falls out of sync.
 """
 
 from mnemo.anki import adapter
@@ -25,14 +26,13 @@ _MINIMAL_CONTENT = {
 
 
 def test_fact_types_match_default_models_targets_and_builders():
-    assert set(FACT_TYPES) == set(adapter._DEFAULT_MODELS)
-    assert set(FACT_TYPES) == set(config._DEFAULT_TARGETS)
+    assert set(FACT_TYPES) == set(config.DEFAULT_FACT_TARGETS)
     assert set(FACT_TYPES) == set(adapter._BUILDERS)
 
 
-def test_config_targets_are_the_adapter_registry_not_a_copy():
-    assert config._DEFAULT_TARGETS is adapter._DEFAULT_MODELS
-    assert config.Config().target_note_types == adapter._DEFAULT_MODELS
+def test_adapter_targets_are_the_config_registry_not_a_copy():
+    assert adapter._DEFAULT_MODELS is config.DEFAULT_FACT_TARGETS
+    assert config.Config().target_note_types == config.DEFAULT_FACT_TARGETS
 
 
 def test_placeholders_cover_every_fact_type():

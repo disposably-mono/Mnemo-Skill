@@ -6,7 +6,7 @@ partial file overrides only the keys it sets (merged over defaults).
 
 import pytest
 
-from mnemo.core.config import Config, ConfigError, load_config
+from mnemo.core.config import Config, ConfigError, DEFAULT_FACT_TARGETS, load_config
 
 
 def test_defaults_when_no_file(tmp_path):
@@ -55,6 +55,19 @@ def test_partial_target_note_types_merge_over_defaults(tmp_path):
 
 def test_none_path_yields_defaults():
     assert load_config(None) == Config()
+
+
+def test_default_fact_targets_is_public_and_owned_by_config():
+    # The registry is config-shaped data that core.config owns directly (the
+    # anki adapter imports it from here, not the other way around).
+    assert DEFAULT_FACT_TARGETS == {
+        "qa": "MONO Basic",
+        "cloze": "MONO Cloze",
+        "list": "MONO Overlapping",
+        "typed": "MONO Type",
+        "image_occlusion": "Image Occlusion",
+    }
+    assert Config().target_note_types == DEFAULT_FACT_TARGETS
 
 
 def test_invalid_auto_tag_is_rejected(tmp_path):

@@ -64,7 +64,7 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
                 f'{back}<br><img src="{html.escape(image_url, quote=True)}" '
                 f'alt="{html.escape(image_alt, quote=True)}">'
             )
-        extra = build_extra(unit, front, back)
+        extra, context = build_extra(unit, front, back)
         verbatim_tag = ["mnemo-verbatim-code"] if unit.verbatim_kind == "code" else []
         tags = [*unit.tags, *verbatim_tag, slugify(unit.topic), "auto"]
         card_id = stable_card_id(front, back, unit.source)
@@ -72,6 +72,7 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             front=front,
             back=back,
             extra=extra,
+            context=context,
             mnemonic=mnemonic,
             card_type=card_type,
             tags=tags,
@@ -338,15 +339,15 @@ def answer_from_cloze(cloze: str) -> str:
 
 
 
-def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> str:
-    """Compose the Extra field from any explicit elaboration plus context.
+def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> tuple[str, str]:
+    """Compose the (explanation, context) fields, rendered as separate boxes.
 
     Prefers an author-supplied ``Extra:``. Without one, it falls back to the
     declarative statement rather than echoing the question, so a Q&A unit does
-    not produce ``Explanation: <question> <answer>``. Whether the explanation is
-    substantive is judged separately by ``explanation_is_thin`` at validation.
-    The context trigger uses the rendered ``front``/``back`` so it matches the
-    fields the validator inspects.
+    not produce an explanation that just restates ``<question> <answer>``.
+    Whether the explanation is substantive is judged separately by
+    ``explanation_is_thin`` at validation. The context trigger uses the
+    rendered ``front``/``back`` so it matches the fields the validator inspects.
     """
     explicit_extra = re.sub(
         r"^Explanation:\s*", "", unit.extra.strip(), flags=re.IGNORECASE
@@ -354,14 +355,11 @@ def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> str:
     explanation = _field(explicit_extra or declarative_statement(unit))
     topic = _field(unit.topic)
     source = _field(unit.source)
-    parts = [f"Explanation: {explanation}"]
     if requires_context(front or unit.text, back or unit.question):
-        parts.append(
-            f"Context: {topic} background is assumed; review {source} if unfamiliar."
-        )
+        context = f"{topic} background is assumed; review {source} if unfamiliar."
     else:
-        parts.append(f"Context: Topic: {topic}.")
-    return " ".join(parts)
+        context = f"Topic: {topic}."
+    return explanation, context
 
 
 def declarative_statement(unit: SourceUnit) -> str:
@@ -376,15 +374,11 @@ def explanation_is_thin(card: Card) -> bool:
     """True when the explanation adds no information beyond Front and Back.
 
     A restated prompt gives false confidence: the ``pre_understanding`` audit
-    check only verifies the ``Explanation:`` prefix exists. This flags cards
-    whose explanation is a near-duplicate of the prompt so a human (or an LLM
-    pass) enriches them before study.
+    check only verifies the explanation is non-empty. This flags cards whose
+    explanation is a near-duplicate of the prompt so a human (or an LLM pass)
+    enriches them before study.
     """
-    body = card.extra
-    if body.startswith("Explanation:"):
-        body = body[len("Explanation:"):]
-    body = body.split("Context:", 1)[0]
-    explanation_tokens = semantic_tokens(body)
+    explanation_tokens = semantic_tokens(card.extra)
     if not explanation_tokens:
         return True
     prompt_tokens = semantic_tokens(f"{card.front} {card.back}")

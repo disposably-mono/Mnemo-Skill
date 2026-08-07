@@ -233,6 +233,7 @@ def _validate_qa(content: dict[str, Any]) -> None:
     _require_nonempty_str(content, "front", "qa")
     _require_nonempty_str(content, "back", "qa")
     _validate_optional_str(content, "extra", "qa")
+    _validate_optional_str(content, "context", "qa")
     _validate_annotations(content, "qa")
 
 
@@ -245,6 +246,7 @@ def _validate_cloze(content: dict[str, Any]) -> None:
             "cloze content must contain a cloze deletion like {{c1::answer}}"
         )
     _validate_optional_str(content, "extra", "cloze")
+    _validate_optional_str(content, "context", "cloze")
     _validate_annotations(content, "cloze")
 
 
@@ -259,6 +261,7 @@ def _validate_list(content: dict[str, Any]) -> None:
         if not isinstance(item, str) or not item.strip():
             raise CardValidationError("each list item must be a non-empty string")
     _validate_optional_str(content, "extra", "list")
+    _validate_optional_str(content, "context", "list")
     _validate_annotations(content, "list")
 
 
@@ -274,6 +277,7 @@ def _validate_typed(content: dict[str, Any]) -> None:
         if not isinstance(hint, str) or not hint.strip():
             raise CardValidationError("each typed hint must be a non-empty string")
     _validate_optional_str(content, "extra", "typed")
+    _validate_optional_str(content, "context", "typed")
     _validate_annotations(content, "typed")
 
 

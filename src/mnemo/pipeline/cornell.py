@@ -315,7 +315,7 @@ def build_cornell_prompt(units: Sequence[SourceUnit]) -> str:
                         "source_unit_id": "id from source_units",
                         "question": "single concrete prompt",
                         "answer": "single source-grounded answer",
-                        "extra": "Explanation: why this fact holds",
+                        "extra": "why this fact holds",
                         "tags": ["optional-tags"],
                         "evidence": "verbatim source span supporting the card",
                     }

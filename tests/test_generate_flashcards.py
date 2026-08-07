@@ -69,7 +69,8 @@ def make_card(**changes):
     base = dict(
         front="What is alpha?",
         back="the first letter",
-        extra="Explanation: Alpha denotes the first ordinal position. Context: Topic: T.",
+        extra="Alpha denotes the first ordinal position.",
+        context="Topic: T.",
         mnemonic="",
         card_type="qa",
         tags=["t"],
@@ -595,8 +596,8 @@ def test_extra_prefix_is_not_duplicated_for_authored_cards():
         )
     )[0]
 
-    assert card.extra.startswith("Explanation: Solvent moves")
-    assert "Explanation: Explanation:" not in card.extra
+    assert card.extra.startswith("Solvent moves")
+    assert "Explanation:" not in card.extra
 
 
 def test_cli_fails_when_requested_section_is_missing(tmp_path):
@@ -833,7 +834,7 @@ def test_sentence_split_keeps_abbreviations_and_initials_together():
 
 
 def test_thin_explanation_is_flagged_but_does_not_block():
-    card = make_card(front="What is X?", back="Y", extra="Explanation: X is Y. Context: Topic: T.")
+    card = make_card(front="What is X?", back="Y", extra="X is Y.")
 
     violations = validate_card(card)
     codes = {violation.code for violation in violations}
@@ -845,7 +846,7 @@ def test_substantive_explanation_is_not_flagged_as_thin():
     card = make_card(
         front="What is osmosis?",
         back="diffusion of water",
-        extra="Explanation: Solvent moves across a semipermeable membrane toward higher solute. Context: Topic: Bio.",
+        extra="Solvent moves across a semipermeable membrane toward higher solute.",
     )
 
     assert "THIN_EXPLANATION" not in {violation.code for violation in validate_card(card)}
@@ -855,7 +856,7 @@ def test_generic_fallback_prompt_is_flagged():
     card = make_card(
         front="What claim or evidence is presented in Ethics?",
         back="a specific claim",
-        extra="Explanation: The source presents a moral claim about autonomy. Context: Topic: Ethics.",
+        extra="The source presents a moral claim about autonomy.",
     )
 
     assert "GENERIC_PROMPT" in {violation.code for violation in validate_card(card)}

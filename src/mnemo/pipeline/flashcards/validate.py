@@ -53,9 +53,9 @@ def validate_card(card: Card) -> list[Violation]:
         violations.append(error("INVALID_ORIGIN", f"Unknown origin {card.origin!r}.", card, "Use source, inferred, or generated-enrichment."))
     if word_count(card.front) > MAX_FRONT_WORDS:
         violations.append(error("FRONT_TOO_LONG", f"Front has {word_count(card.front)} words; maximum is {MAX_FRONT_WORDS}.", card, "Shorten or split the prompt."))
-    if not card.extra.startswith("Explanation:"):
-        violations.append(error("MISSING_EXPLANATION", "Extra must begin with an explanation.", card, "Add pre-understanding context in Extra."))
-    if requires_context(card.front, card.back) and "Context:" not in card.extra:
+    if not card.extra.strip():
+        violations.append(error("MISSING_EXPLANATION", "Extra must contain an explanation.", card, "Add pre-understanding context in Extra."))
+    if requires_context(card.front, card.back) and not card.context.strip():
         violations.append(error("MISSING_CONTEXT", "Technical card lacks a Context section.", card, "Add the prerequisite domain context."))
     if card.card_type not in CARD_TYPES:
         violations.append(error("INVALID_CARD_TYPE", f"Unknown card type {card.card_type!r}.", card, f"Use one of: {', '.join(CARD_TYPES)}."))

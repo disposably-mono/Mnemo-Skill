@@ -40,6 +40,7 @@ REQUIRED_FIELDS = ("Front", "Back", "Extra", "Mnemonic", "CardType", "Tags", "Ca
 
 _DETAILS = """
 {{#Extra}}<div class="refined-block"><div class="mono-label">Explanation</div>{{Extra}}</div>{{/Extra}}
+{{#Context}}<div class="refined-block context"><div class="mono-label">Context</div>{{Context}}</div>{{/Context}}
 {{#Mnemonic}}<div class="refined-block mnemonic"><div class="mono-label">Mnemonic</div>{{Mnemonic}}</div>{{/Mnemonic}}
 {{#Topic}}<div class="source">Topic: {{Topic}}</div>{{/Topic}}
 {{#Source}}<div class="source">Source: {{Source}}</div>{{/Source}}
@@ -62,6 +63,7 @@ REFINED_CSS = MONO_CSS + """
   font-size: 16px;
 }
 .refined-block.mnemonic { border-left-color: var(--highlight); }
+.refined-block.context { border-left-color: var(--text-muted); }
 .refined-image { margin-top: 18px; }
 .refined-image img { max-width: 100%; border-radius: var(--radius-md); display: block; }
 """
@@ -69,7 +71,7 @@ REFINED_CSS = MONO_CSS + """
 REFINED_BASIC = NoteType(
     name=BASIC_MODEL,
     fields=(
-        "Front", "Back", "Extra", "Mnemonic", "CardType", "Topic",
+        "Front", "Back", "Extra", "Context", "Mnemonic", "CardType", "Topic",
         "Source", "ImageURL", "ImageAlt", "CardID",
     ),
     templates=(
@@ -91,7 +93,7 @@ REFINED_BASIC = NoteType(
 REFINED_CLOZE = NoteType(
     name=CLOZE_MODEL,
     fields=(
-        "Text", "Back", "Extra", "Mnemonic", "CardType", "Topic",
+        "Text", "Back", "Extra", "Context", "Mnemonic", "CardType", "Topic",
         "Source", "ImageURL", "ImageAlt", "CardID",
     ),
     templates=(
@@ -116,7 +118,7 @@ REFINED_CLOZE = NoteType(
 REFINED_TYPED = NoteType(
     name=TYPED_MODEL,
     fields=(
-        "Prompt", "Answer", "Extra", "Mnemonic", "CardType", "Topic",
+        "Prompt", "Answer", "Extra", "Context", "Mnemonic", "CardType", "Topic",
         "Source", "CardID",
     ),
     templates=(
@@ -153,16 +155,16 @@ class RefinedImportReport:
 # the JSONL/Fact path (mnemo.anki.adapter.adapt).
 REFINED_MAPPINGS: Mappings = {
     "qa": {BASIC_MODEL: {
-        "Front": "{front}", "Back": "{back}", "Extra": "{extra}",
+        "Front": "{front}", "Back": "{back}", "Extra": "{extra}", "Context": "{context}",
         "Mnemonic": "{mnemonic}", "Topic": "{topic}", "Source": "{source}",
         "CardID": "{fact_id}",
     }},
     "cloze": {CLOZE_MODEL: {
-        "Text": "{text}", "Extra": "{extra}", "Mnemonic": "{mnemonic}",
+        "Text": "{text}", "Extra": "{extra}", "Context": "{context}", "Mnemonic": "{mnemonic}",
         "Topic": "{topic}", "Source": "{source}", "CardID": "{fact_id}",
     }},
     "typed": {TYPED_MODEL: {
-        "Prompt": "{prompt}", "Answer": "{answer}", "Extra": "{extra}",
+        "Prompt": "{prompt}", "Answer": "{answer}", "Extra": "{extra}", "Context": "{context}",
         "Mnemonic": "{mnemonic}", "Topic": "{topic}", "Source": "{source}",
         "CardID": "{fact_id}",
     }},
@@ -195,6 +197,7 @@ def row_to_fact(row: dict[str, str], deck: str) -> Fact:
         raise CardValidationError("CardID is required")
     annotations = {
         "extra": _csv_text(row.get("Extra") or ""),
+        "context": _csv_text(row.get("Context") or ""),
         "mnemonic": _csv_text(row.get("Mnemonic") or ""),
         "topic": _csv_text(row.get("Topic") or ""),
     }

@@ -175,15 +175,18 @@ def _placeholders(
     if fact.type == "qa":
         return {**common, **annotations, "front": _field(content["front"]),
                 "back": _field(content["back"]), "extra": _field(content.get("extra", "")),
+                "context": _field(content.get("context", "")),
                 "distractors": _render_confusions(fact)}
     if fact.type == "cloze":
         return {**common, **annotations, "text": _field(content["text"]),
                 "extra": _field(content.get("extra", "")),
+                "context": _field(content.get("context", "")),
                 "distractors": _render_confusions(fact)}
     if fact.type == "list":
         return {**common, **annotations, "title": _field(content["title"]),
                 "items": _render_list_items(fact),
-                "extra": _field(content.get("extra", ""))}
+                "extra": _field(content.get("extra", "")),
+                "context": _field(content.get("context", ""))}
     if fact.type == "typed":
         return {
             **common,
@@ -192,6 +195,7 @@ def _placeholders(
             "answer": _field(content["answer"]),
             "hints": _render_hints(content.get("hints", [])),
             "extra": _field(content.get("extra", "")),
+            "context": _field(content.get("context", "")),
         }
     return {
         **common,

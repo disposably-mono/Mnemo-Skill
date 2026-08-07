@@ -11,7 +11,7 @@ from typing import Protocol, Sequence
 
 from .models import CARD_TYPES, Card, SourceUnit
 from .policy import DEFAULT_AI_COMMAND_TIMEOUT_S
-from .render import _field, build_cards, stable_card_id
+from .render import _field, build_cards, requires_context, stable_card_id
 
 
 class AiAuthoringError(ValueError):
@@ -108,7 +108,8 @@ def build_authoring_prompt(units: Sequence[SourceUnit]) -> str:
                     {
                         "front": "single concrete prompt",
                         "back": "single source-grounded answer",
-                        "extra": "Explanation: why this fact holds",
+                        "extra": "why this fact holds",
+                        "context": "optional prerequisite background note",
                         "card_type": "qa|cloze|reverse|typed|list",
                         "source_unit_id": "id from source_units",
                         "evidence": "verbatim source span supporting the card",
@@ -159,10 +160,13 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
         confidence_value = float(confidence)
     except (TypeError, ValueError) as exc:
         raise AiAuthoringError("AI card confidence must be numeric.") from exc
+    draft_context = str(draft.get("context", "")).strip()
+    context = _field(draft_context) if draft_context else default_context(unit, front, back)
     return Card(
         front=front,
         back=back,
         extra=_field(str(draft["extra"])),
+        context=context,
         mnemonic=_field(str(draft.get("mnemonic", ""))),
         card_type=card_type,
         tags=[*unit.tags, *tags, "ai-authored", "auto"],
@@ -177,6 +181,15 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
         origin=unit.origin,
         confidence=confidence_value,
     )
+
+
+def default_context(unit: SourceUnit, front: str, back: str) -> str:
+    """Fall back to the same topic/source context render.py's build_extra uses."""
+    topic = _field(unit.topic)
+    source = _field(unit.source)
+    if requires_context(front or unit.text, back or unit.question):
+        return f"{topic} background is assumed; review {source} if unfamiliar."
+    return f"Topic: {topic}."
 
 
 def evidence_is_supported(evidence: str, unit: SourceUnit) -> bool:

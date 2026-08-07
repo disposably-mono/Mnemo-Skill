@@ -21,6 +21,7 @@ CSV_FIELDS = (
     "Front",
     "Back",
     "Extra",
+    "Context",
     "Mnemonic",
     "CardType",
     "Tags",
@@ -82,6 +83,7 @@ class Card:
     front: str
     back: str
     extra: str
+    context: str
     mnemonic: str
     card_type: str
     tags: list[str]
@@ -103,6 +105,7 @@ class Card:
             "Front": self.front,
             "Back": self.back,
             "Extra": self.extra,
+            "Context": self.context,
             "Mnemonic": self.mnemonic,
             "CardType": self.card_type,
             "Tags": " ".join(dict.fromkeys(self.tags)),

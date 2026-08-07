@@ -76,8 +76,8 @@ risk but does not replace review by someone who understands the subject.
 
 Every card must contain:
 
-- `Extra` beginning with `Explanation:`
-- `Context:` when prerequisite knowledge may be required
+- `Extra` containing a substantive explanation (rendered as its own labeled box; no "Explanation:" prefix needed)
+- `Context` column when prerequisite knowledge may be required (rendered as its own labeled box)
 - a specific source location
 
 Do not memorize an unexplained label. If the source does not support an

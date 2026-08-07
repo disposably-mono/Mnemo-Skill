@@ -49,6 +49,7 @@ def load_cards(path: Path) -> tuple[list[Card], list[Violation]]:
                         front=(row.get("Front") or "").strip(),
                         back=(row.get("Back") or "").strip(),
                         extra=(row.get("Extra") or "").strip(),
+                        context=(row.get("Context") or "").strip(),
                         mnemonic=(row.get("Mnemonic") or "").strip(),
                         card_type=(row.get("CardType") or "").strip(),
                         tags=(row.get("Tags") or "").split(),
@@ -211,7 +212,7 @@ def build_report(
                 v.code in {"CLOZE_FORMAT", "TYPE_FORMAT_MISMATCH", "REVERSE_FORMAT"}
                 for v in violations
             ),
-            "pre_understanding": all(card.extra.startswith("Explanation:") for card in cards),
+            "pre_understanding": all(card.extra.strip() for card in cards),
             "explanation_substance": not any(v.code == "THIN_EXPLANATION" for v in violations),
             "prompt_specificity": not any(v.code == "GENERIC_PROMPT" for v in violations),
             "source_grounding": all(bool(card.source) for card in cards),

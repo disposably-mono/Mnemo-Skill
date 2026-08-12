@@ -249,6 +249,29 @@ Compare predicted and actual recall only for mature reviews with intervals great
 than 21 days. Report per-review calibration error and mean calibration error. Do
 not claim a retention model was validated when no mature review rows exist.
 
+## Deck Naming Convention
+
+All cards must target a **three-level Anki deck**:
+
+```
+Mnemo::<Course Title>::<Module Title>
+```
+
+Canonical examples (do not replace — these are the reference examples for this workspace):
+
+| Course | Module | Deck |
+|--------|--------|------|
+| History 1 | Introduction to History | `Mnemo::History 1::Introduction to History` |
+| Science 11 | Perspectives on Living Systems | `Mnemo::Science 11::Perspectives on Living Systems` |
+
+Rules:
+- `Mnemo` is always the fixed root — never omit it.
+- Use the exact `courseTitle` from `course.yaml` and the exact `moduleTitle` from `module.yaml`. Do not abbreviate or slugify.
+- Each module's `module.yaml` contains a `deck:` field — read it rather than constructing the name from memory.
+- When authoring cards in Fact JSONL, set `"deck"` to the value from `module.yaml` verbatim.
+- When running `mnemo-import-csv --deck`, pass the value from `module.yaml` verbatim.
+- `defaultDeck` in `course.yaml` is a fallback for imports not tied to a module; prefer the module `deck` field.
+
 ## Import Notes
 
 The generator emits notes plus a scheduler sidecar; Anki CSV import does not apply

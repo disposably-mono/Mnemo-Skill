@@ -47,11 +47,17 @@ def build_course_yaml(course_title: str, course_slug: str, term: str) -> str:
     )
 
 
-def build_module_yaml(course_slug: str, module_title: str, slug: str) -> str:
+def module_deck(course_title: str, module_title: str) -> str:
+    """Canonical three-level Anki deck name for a module."""
+    return f"Mnemo::{course_title}::{module_title}"
+
+
+def build_module_yaml(course_slug: str, course_title: str, module_title: str, slug: str) -> str:
     return (
         f"moduleSlug: {yaml_scalar(slug)}\n"
         f"moduleTitle: {yaml_scalar(module_title)}\n"
         f"courseSlug: {yaml_scalar(course_slug)}\n"
+        f"deck: {yaml_scalar(module_deck(course_title, module_title))}\n"
         "sourceStatus: pending\n"
         "noteStatus: pending\n"
         "cardStatus: pending\n"
@@ -83,7 +89,7 @@ def create_workspace(
         course_yaml.write_text(build_course_yaml(course_title, course_slug, term), encoding="utf-8")
     module_yaml = module_dir / "module.yaml"
     if not module_yaml.exists():
-        module_yaml.write_text(build_module_yaml(course_slug, module_title, slug), encoding="utf-8")
+        module_yaml.write_text(build_module_yaml(course_slug, course_title, module_title, slug), encoding="utf-8")
     return module_dir
 
 

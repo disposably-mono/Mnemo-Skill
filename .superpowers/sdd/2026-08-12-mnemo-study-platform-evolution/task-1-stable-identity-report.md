@@ -267,3 +267,74 @@ Result:
 TOTAL ... 88.12%
 Required test coverage of 80.0% reached.
 ```
+
+### Review follow-up 2: image-supported generated rows still mismatched on blank RevisionHash
+
+Follow-up date: 2026-08-12
+
+Problem:
+
+- generated image-supported cards still hashed the `Back` field including the
+  rendered `<img>` presentation markup
+- row reconstruction unescaped `Back`, so URL/alt values containing `&`, `<`,
+  or similar characters changed the reconstructed payload
+- this left a remaining mismatch when importing a generated row with blank
+  `RevisionHash`
+
+Fix:
+
+- kept image fields as first-class logical inputs in the canonical payload
+- normalized canonical `back` for image-supported cards by stripping the
+  rendered image suffix in either escaped generated form or unescaped row form
+- this makes revision hashing depend on the text answer plus `image_url` /
+  `image_alt`, not duplicated presentation markup
+
+RED:
+
+```bash
+pytest tests/test_import_refined_csv.py::test_row_to_fact_preserves_generated_revision_hash_for_image_supported_cards -q
+```
+
+Observed:
+
+```text
+AssertionError: fact.revision_hash != card.revision_hash
+```
+
+GREEN:
+
+```bash
+pytest tests/test_import_refined_csv.py::test_row_to_fact_preserves_generated_revision_hash_for_image_supported_cards -q
+```
+
+Result:
+
+```text
+1 passed
+```
+
+Covering verification after this fix:
+
+```bash
+pytest tests/test_import_refined_csv.py tests/test_generate_flashcards.py tests/test_identity.py tests/test_ai_authoring.py -q
+```
+
+Result:
+
+```text
+104 passed
+```
+
+Fresh full-suite verification:
+
+```bash
+pytest --cov
+```
+
+Result:
+
+```text
+355 passed
+TOTAL ... 88.21%
+Required test coverage of 80.0% reached.
+```

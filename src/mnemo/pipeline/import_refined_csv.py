@@ -22,8 +22,8 @@ from mnemo.anki.adapter import AnkiNote, Mappings, adapt
 from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
 from mnemo.core.card_schema import CardValidationError, Fact
 from mnemo.core.config import DEFAULT_URL
-from mnemo.core.identity import revision_hash as compute_revision_hash
 from mnemo.anki.note_types import CardTemplate, MONO_CSS, NoteType
+from mnemo.pipeline.flashcards.revisions import rendered_card_revision_hash_from_row
 from mnemo.pipeline.flashcards.policy import (
     DEFAULT_EASE_PERCENT,
     DEFAULT_EASY_INTERVAL_DAYS,
@@ -222,9 +222,7 @@ def row_to_fact(row: dict[str, str], deck: str) -> Fact:
         "tags": _augmented_tags(row, card_id),
     }
     revision_value = (row.get("RevisionHash") or "").strip()
-    data["revision_hash"] = revision_value or compute_revision_hash(
-        _revision_payload(row, card_type)
-    )
+    data["revision_hash"] = revision_value or rendered_card_revision_hash_from_row(row)
     if (row.get("Source") or "").strip():
         data["source"] = _csv_text(row["Source"])
     for column, key in _METADATA_COLUMNS:
@@ -425,30 +423,6 @@ def _field(value: str) -> str:
 
 def _csv_text(value: str) -> str:
     return html.unescape(value)
-
-
-def _revision_payload(row: dict[str, str], fact_type: str) -> dict[str, object]:
-    return {
-        "type": fact_type,
-        "front": _csv_text(row.get("Front") or ""),
-        "back": _csv_text(row.get("Back") or ""),
-        "extra": _csv_text(row.get("Extra") or ""),
-        "context": _csv_text(row.get("Context") or ""),
-        "mnemonic": _csv_text(row.get("Mnemonic") or ""),
-        "topic": _csv_text(row.get("Topic") or ""),
-        "tags": (row.get("Tags") or "").split(),
-        "source": _csv_text(row.get("Source") or ""),
-        "image_url": row.get("ImageURL") or "",
-        "image_alt": row.get("ImageAlt") or "",
-        "knowledge_unit_id": row.get("KnowledgeUnitID") or "",
-        "knowledge_kind": row.get("KnowledgeKind") or "",
-        "objective_ids": (row.get("ObjectiveIDs") or "").split(),
-        "prerequisite_ids": (row.get("PrerequisiteIDs") or "").split(),
-        "origin": row.get("Origin") or "",
-        "confidence": row.get("Confidence") or "",
-    }
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path)

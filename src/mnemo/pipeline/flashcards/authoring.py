@@ -11,8 +11,8 @@ from typing import Protocol, Sequence
 
 from .models import CARD_TYPES, Card, SourceUnit
 from .policy import DEFAULT_AI_COMMAND_TIMEOUT_S
-from .render import _field, build_cards, requires_context, stable_card_id
-from mnemo.core.identity import revision_hash as compute_revision_hash
+from .render import _build_extra_raw, _field, build_cards, stable_card_id
+from .revisions import rendered_card_revision_hash
 
 
 class AiAuthoringError(ValueError):
@@ -152,8 +152,8 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
     card_type = str(draft["card_type"]).strip()
     if card_type not in CARD_TYPES:
         raise AiAuthoringError(f"AI card draft has unknown card_type: {card_type}")
-    front = _field(str(draft["front"]))
-    back = _field(str(draft["back"]))
+    raw_front = str(draft["front"])
+    raw_back = str(draft["back"])
     raw_tags = draft.get("tags", [])
     tags = [str(tag) for tag in raw_tags if str(tag).strip()] if isinstance(raw_tags, list) else []
     confidence = draft.get("confidence", unit.confidence)
@@ -161,46 +161,58 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
         confidence_value = float(confidence)
     except (TypeError, ValueError) as exc:
         raise AiAuthoringError("AI card confidence must be numeric.") from exc
+    raw_extra = str(draft["extra"])
+    raw_mnemonic = str(draft.get("mnemonic", ""))
+    raw_topic = str(draft.get("topic") or unit.topic)
+    raw_source = str(draft.get("source") or unit.source)
     draft_context = str(draft.get("context", "")).strip()
-    context = _field(draft_context) if draft_context else default_context(unit, front, back)
+    raw_context = draft_context or _build_extra_raw(unit, raw_front, raw_back)[1]
+    front = _field(raw_front)
+    back = _field(raw_back)
+    context = _field(raw_context)
+    escaped_extra = _field(raw_extra)
+    escaped_mnemonic = _field(raw_mnemonic)
+    escaped_topic = _field(raw_topic)
+    escaped_source = _field(raw_source)
+    card_tags = [*unit.tags, *tags, "ai-authored", "auto"]
     return Card(
         card_id=stable_card_id(
-            front,
-            back,
+            raw_front,
+            raw_back,
             unit.source,
             unit_id=unit.knowledge_unit_id,
             recall_intent=unit.learning_purpose,
             fact_type=card_type,
         ),
-        revision_hash=compute_revision_hash(
-            {
-                "front": front,
-                "back": back,
-                "extra": _field(str(draft["extra"])),
-                "context": context,
-                "mnemonic": _field(str(draft.get("mnemonic", ""))),
-                "card_type": card_type,
-                "tags": [*unit.tags, *tags, "ai-authored", "auto"],
-                "topic": _field(str(draft.get("topic") or unit.topic)),
-                "source": _field(str(draft.get("source") or unit.source)),
-                "knowledge_unit_id": unit.knowledge_unit_id,
-                "knowledge_kind": unit.knowledge_kind,
-                "learning_purpose": unit.learning_purpose,
-                "objective_ids": list(unit.objective_ids),
-                "prerequisite_ids": list(unit.prerequisite_ids),
-                "origin": unit.origin,
-                "confidence": confidence_value,
-            }
+        revision_hash=rendered_card_revision_hash(
+            front=raw_front,
+            back=raw_back,
+            extra=raw_extra,
+            context=raw_context,
+            mnemonic=raw_mnemonic,
+            card_type=card_type,
+            tags=card_tags,
+            topic=raw_topic,
+            source=raw_source,
+            image_url="",
+            image_alt="",
+            knowledge_unit_id=unit.knowledge_unit_id,
+            knowledge_kind=unit.knowledge_kind,
+            learning_purpose=unit.learning_purpose,
+            objective_ids=list(unit.objective_ids),
+            prerequisite_ids=list(unit.prerequisite_ids),
+            origin=unit.origin,
+            confidence=confidence_value,
         ),
         front=front,
         back=back,
-        extra=_field(str(draft["extra"])),
+        extra=escaped_extra,
         context=context,
-        mnemonic=_field(str(draft.get("mnemonic", ""))),
+        mnemonic=escaped_mnemonic,
         card_type=card_type,
-        tags=[*unit.tags, *tags, "ai-authored", "auto"],
-        topic=_field(str(draft.get("topic") or unit.topic)),
-        source=_field(str(draft.get("source") or unit.source)),
+        tags=card_tags,
+        topic=escaped_topic,
+        source=escaped_source,
         knowledge_unit_id=unit.knowledge_unit_id,
         knowledge_kind=unit.knowledge_kind,
         learning_purpose=unit.learning_purpose,
@@ -209,16 +221,6 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
         origin=unit.origin,
         confidence=confidence_value,
     )
-
-
-def default_context(unit: SourceUnit, front: str, back: str) -> str:
-    """Fall back to the same topic/source context render.py's build_extra uses."""
-    topic = _field(unit.topic)
-    source = _field(unit.source)
-    if requires_context(front or unit.text, back or unit.question):
-        return f"{topic} background is assumed; review {source} if unfamiliar."
-    return f"Topic: {topic}."
-
 
 def evidence_is_supported(evidence: str, unit: SourceUnit) -> bool:
     haystack = " ".join(

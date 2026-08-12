@@ -150,3 +150,120 @@ Required test coverage of 80.0% reached.
 - The fallback adapter revision payload for generic Fact imports excludes deck
   identity intentionally; refined CSV and generated-card flows compute and carry
   explicit revision hashes so visible card changes still propagate correctly.
+
+## Review follow-up fixes
+
+Follow-up date: 2026-08-12
+
+Addressed two HIGH consistency findings without expanding beyond Track 1.
+
+### Finding 1: refined CSV fallback used a non-canonical revision payload
+
+Problem:
+
+- refined CSV fallback used a local `_revision_payload()`
+- it hashed `type` instead of `card_type`
+- it omitted `learning_purpose`
+- it hashed `Confidence` as a CSV string instead of the normalized numeric value
+
+Fix:
+
+- added shared helper module `src/mnemo/pipeline/flashcards/revisions.py`
+- moved canonical rendered-card payload construction there
+- added `rendered_card_revision_hash_from_row()` so `row_to_fact()` rebuilds the
+  same normalized payload from generated CSV rows
+- row reconstruction now unescapes text fields and normalizes confidence to a
+  float where possible
+
+RED:
+
+```bash
+pytest tests/test_import_refined_csv.py::test_row_to_fact_preserves_generated_revision_hash_when_csv_field_is_blank -q
+```
+
+Observed:
+
+```text
+AssertionError: fact.revision_hash != card.revision_hash
+```
+
+GREEN:
+
+```bash
+pytest tests/test_import_refined_csv.py::test_row_to_fact_preserves_generated_revision_hash_when_csv_field_is_blank -q
+```
+
+Result:
+
+```text
+1 passed
+```
+
+### Finding 2: AI authoring hashed escaped metadata while deterministic cards did not
+
+Problem:
+
+- AI authoring hashed escaped topic/source metadata
+- deterministic revision hashing used raw topic/source metadata
+- logically equivalent cards could therefore produce different revision hashes
+
+Fix:
+
+- AI authoring now builds revision hashes from the same shared raw canonical
+  rendered-card payload before HTML escaping
+- deterministic generation now also computes revision hashes from raw logical
+  fields before escaping, using the same helper
+- shared raw extra/context derivation now comes from render logic so both paths
+  agree on fallback context text
+
+RED:
+
+```bash
+pytest tests/test_ai_authoring.py::test_json_ai_author_matches_deterministic_revision_hash_for_logically_equivalent_card -q
+```
+
+Observed:
+
+```text
+AssertionError: authored.revision_hash != deterministic.revision_hash
+```
+
+GREEN:
+
+```bash
+pytest tests/test_ai_authoring.py::test_json_ai_author_matches_deterministic_revision_hash_for_logically_equivalent_card -q
+```
+
+Result:
+
+```text
+1 passed
+```
+
+### Covering verification after fixes
+
+Focused impacted suites:
+
+```bash
+pytest tests/test_import_refined_csv.py tests/test_ai_authoring.py tests/test_generate_flashcards.py tests/test_identity.py -q
+```
+
+Result:
+
+```text
+103 passed
+```
+
+Final full-suite verification:
+
+```bash
+pytest --cov
+```
+
+Result:
+
+```text
+354 passed
+TOTAL ... 88.12%
+Required test coverage of 80.0% reached.
+```

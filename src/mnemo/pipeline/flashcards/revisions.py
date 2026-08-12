@@ -29,9 +29,11 @@ def rendered_card_payload(
     origin: str,
     confidence: float | int | str | None,
 ) -> dict[str, object]:
+    normalized_image_url = image_url
+    normalized_image_alt = image_alt
     return {
         "front": front,
-        "back": back,
+        "back": _normalize_back(back, normalized_image_url, normalized_image_alt),
         "extra": extra,
         "context": context,
         "mnemonic": mnemonic,
@@ -39,8 +41,8 @@ def rendered_card_payload(
         "tags": list(dict.fromkeys(tags)),
         "topic": topic,
         "source": source,
-        "image_url": image_url,
-        "image_alt": image_alt,
+        "image_url": normalized_image_url,
+        "image_alt": normalized_image_alt,
         "knowledge_unit_id": knowledge_unit_id,
         "knowledge_kind": knowledge_kind,
         "learning_purpose": learning_purpose,
@@ -97,3 +99,17 @@ def _normalize_confidence(value: float | int | str | None) -> float | str | None
         return float(value.strip())
     except ValueError:
         return value.strip()
+
+
+def _normalize_back(back: str, image_url: str, image_alt: str) -> str:
+    if not image_url:
+        return back
+    raw_suffix = f'<br><img src="{image_url}" alt="{image_alt}">'
+    escaped_suffix = (
+        f'<br><img src="{html.escape(image_url, quote=True)}" '
+        f'alt="{html.escape(image_alt, quote=True)}">'
+    )
+    for suffix in (raw_suffix, escaped_suffix):
+        if back.endswith(suffix):
+            return back[: -len(suffix)]
+    return back

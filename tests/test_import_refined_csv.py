@@ -273,6 +273,34 @@ def test_row_to_fact_preserves_generated_revision_hash_when_csv_field_is_blank()
     assert fact.revision_hash == card.revision_hash
 
 
+def test_row_to_fact_preserves_generated_revision_hash_for_image_supported_cards():
+    card = build_cards(
+        [
+            SourceUnit(
+                text="ATP synthase uses a proton gradient.",
+                topic="Bio & Chem",
+                source="lecture<1>.md",
+                question="What does ATP synthase use?",
+                answer="A proton gradient.",
+                extra="The source states ATP synthase uses a proton gradient.",
+                tags=["bio"],
+                image_url="https://example.com/img?a=1&b=2",
+                image_alt="ATP < transporter & channel",
+                knowledge_unit_id="unit-atp",
+                knowledge_kind="fact",
+                learning_purpose="recall",
+                origin="source",
+                confidence=1.0,
+            )
+        ]
+    )[0]
+    row = {**card.to_row(), "RevisionHash": ""}
+
+    fact = row_to_fact(row, "Deck")
+
+    assert fact.revision_hash == card.revision_hash
+
+
 def test_row_to_fact_rejects_malformed_metadata():
     base = {"Front": "Q?", "Back": "A", "CardType": "qa", "CardID": "x"}
     with pytest.raises(CardValidationError, match="knowledge_kind"):

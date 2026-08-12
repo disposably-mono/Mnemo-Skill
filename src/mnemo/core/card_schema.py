@@ -63,6 +63,7 @@ class Fact:
     source: str | None = None
     distractors: list[Distractor] = field(default_factory=list)
     id: str | None = None
+    revision_hash: str | None = None
     knowledge_unit_id: str | None = None
     knowledge_kind: str | None = None
     objective_ids: list[str] = field(default_factory=list)
@@ -93,6 +94,7 @@ class Fact:
             source=data.get("source"),
             distractors=distractors,
             id=data.get("id"),
+            revision_hash=data.get("revision_hash"),
             knowledge_unit_id=data.get("knowledge_unit_id"),
             knowledge_kind=data.get("knowledge_kind"),
             objective_ids=data.get("objective_ids") or [],
@@ -118,7 +120,14 @@ class Fact:
             out["source"] = self.source
         if self.distractors:
             out["distractors"] = [d.to_dict() for d in self.distractors]
-        for key in ("id", "knowledge_unit_id", "knowledge_kind", "origin", "confidence"):
+        for key in (
+            "id",
+            "revision_hash",
+            "knowledge_unit_id",
+            "knowledge_kind",
+            "origin",
+            "confidence",
+        ):
             value = getattr(self, key)
             if value is not None:
                 out[key] = value
@@ -160,7 +169,7 @@ def validate_fact(fact: Fact) -> None:
     if fact.source is not None and not isinstance(fact.source, str):
         raise CardValidationError("source must be a string when provided")
 
-    for name in ("id", "knowledge_unit_id"):
+    for name in ("id", "revision_hash", "knowledge_unit_id"):
         value = getattr(fact, name)
         if value is not None and (not isinstance(value, str) or not value.strip()):
             raise CardValidationError(f"{name} must be a non-empty string when provided")

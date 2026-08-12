@@ -12,6 +12,7 @@ from typing import Protocol, Sequence
 from .models import CARD_TYPES, Card, SourceUnit
 from .policy import DEFAULT_AI_COMMAND_TIMEOUT_S
 from .render import _field, build_cards, requires_context, stable_card_id
+from mnemo.core.identity import revision_hash as compute_revision_hash
 
 
 class AiAuthoringError(ValueError):
@@ -163,6 +164,34 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
     draft_context = str(draft.get("context", "")).strip()
     context = _field(draft_context) if draft_context else default_context(unit, front, back)
     return Card(
+        card_id=stable_card_id(
+            front,
+            back,
+            unit.source,
+            unit_id=unit.knowledge_unit_id,
+            recall_intent=unit.learning_purpose,
+            fact_type=card_type,
+        ),
+        revision_hash=compute_revision_hash(
+            {
+                "front": front,
+                "back": back,
+                "extra": _field(str(draft["extra"])),
+                "context": context,
+                "mnemonic": _field(str(draft.get("mnemonic", ""))),
+                "card_type": card_type,
+                "tags": [*unit.tags, *tags, "ai-authored", "auto"],
+                "topic": _field(str(draft.get("topic") or unit.topic)),
+                "source": _field(str(draft.get("source") or unit.source)),
+                "knowledge_unit_id": unit.knowledge_unit_id,
+                "knowledge_kind": unit.knowledge_kind,
+                "learning_purpose": unit.learning_purpose,
+                "objective_ids": list(unit.objective_ids),
+                "prerequisite_ids": list(unit.prerequisite_ids),
+                "origin": unit.origin,
+                "confidence": confidence_value,
+            }
+        ),
         front=front,
         back=back,
         extra=_field(str(draft["extra"])),
@@ -172,7 +201,6 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
         tags=[*unit.tags, *tags, "ai-authored", "auto"],
         topic=_field(str(draft.get("topic") or unit.topic)),
         source=_field(str(draft.get("source") or unit.source)),
-        card_id=stable_card_id(front, back, unit.source),
         knowledge_unit_id=unit.knowledge_unit_id,
         knowledge_kind=unit.knowledge_kind,
         learning_purpose=unit.learning_purpose,

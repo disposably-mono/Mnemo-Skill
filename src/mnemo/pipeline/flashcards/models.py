@@ -30,6 +30,7 @@ CSV_FIELDS = (
     "Topic",
     "Source",
     "CardID",
+    "RevisionHash",
     "KnowledgeUnitID",
     "KnowledgeKind",
     "LearningPurpose",
@@ -92,6 +93,7 @@ class Card:
     image_url: str = ""
     image_alt: str = ""
     card_id: str = ""
+    revision_hash: str = ""
     knowledge_unit_id: str = ""
     knowledge_kind: str = "fact"
     learning_purpose: str = "recall"
@@ -114,6 +116,7 @@ class Card:
             "Topic": self.topic,
             "Source": self.source,
             "CardID": self.card_id,
+            "RevisionHash": self.revision_hash,
             "KnowledgeUnitID": self.knowledge_unit_id,
             "KnowledgeKind": self.knowledge_kind,
             "LearningPurpose": self.learning_purpose,

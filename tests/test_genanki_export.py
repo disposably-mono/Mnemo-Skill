@@ -45,7 +45,7 @@ def test_stable_id_is_deterministic_and_in_genanki_range():
 def test_to_genanki_note_orders_fields_per_note_type():
     note = to_genanki_note(_basic_note(), MONO_BASIC)
     # genanki.Note.fields is a positional list matching the model field order.
-    assert note.fields == ["Capital of Australia?", "Canberra", "", "atlas.md"]
+    assert note.fields == ["Capital of Australia?", "Canberra", "", "atlas.md", "", ""]
     assert note.tags == ["geo", "auto"]
 
 

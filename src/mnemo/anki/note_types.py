@@ -190,7 +190,7 @@ _SOURCE_BLOCK = '{{#Source}}<div class="source">{{Source}}</div>{{/Source}}'
 
 MONO_BASIC = NoteType(
     name="MONO Basic",
-    fields=("Front", "Back", "Distractors", "Source"),
+    fields=("Front", "Back", "Distractors", "Source", "CardID", "RevisionHash"),
     templates=(
         CardTemplate(
             name="Card 1",
@@ -210,7 +210,7 @@ MONO_BASIC = NoteType(
 
 MONO_CLOZE = NoteType(
     name="MONO Cloze",
-    fields=("Text", "Extra", "Distractors", "Source"),
+    fields=("Text", "Extra", "Distractors", "Source", "CardID", "RevisionHash"),
     templates=(
         CardTemplate(
             name="Cloze",
@@ -232,7 +232,7 @@ MONO_CLOZE = NoteType(
 # (each item its own deletion). Native + cross-platform; no add-on, no JS.
 MONO_OVERLAPPING = NoteType(
     name="MONO Overlapping",
-    fields=("Title", "Text", "Source"),
+    fields=("Title", "Text", "Source", "CardID", "RevisionHash"),
     templates=(
         CardTemplate(
             name="Overlapping",
@@ -250,7 +250,17 @@ MONO_OVERLAPPING = NoteType(
 
 MONO_TYPE = NoteType(
     name="MONO Type",
-    fields=("Prompt", "Answer", "Hint 1", "Hint 2", "Hint 3", "Extra", "Source"),
+    fields=(
+        "Prompt",
+        "Answer",
+        "Hint 1",
+        "Hint 2",
+        "Hint 3",
+        "Extra",
+        "Source",
+        "CardID",
+        "RevisionHash",
+    ),
     templates=(
         CardTemplate(
             name="Typed Answer",
@@ -278,7 +288,7 @@ MONO_TYPE = NoteType(
 
 MONO_CODE = NoteType(
     name="MONO Code",
-    fields=("Front", "Code", "Extra", "Source"),
+    fields=("Front", "Code", "Extra", "Source", "CardID", "RevisionHash"),
     templates=(
         CardTemplate(
             name="Code Recall",

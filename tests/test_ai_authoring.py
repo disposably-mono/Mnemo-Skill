@@ -9,6 +9,8 @@ from mnemo.pipeline.generate_flashcards import (
     CommandAiProvider,
     FileAiProvider,
     JsonAiAuthor,
+    SourceUnit,
+    build_cards,
     build_authoring_prompt,
     parse_content,
     plan_knowledge,
@@ -58,6 +60,50 @@ def test_json_ai_author_converts_structured_cards(tmp_path):
     assert cards[0].knowledge_unit_id == units[0].knowledge_unit_id
     assert cards[0].confidence == 0.88
     assert not [violation for violation in validate_card(cards[0]) if violation.level == "error"]
+
+
+def test_json_ai_author_matches_deterministic_revision_hash_for_logically_equivalent_card(tmp_path):
+    response = tmp_path / "cards.json"
+    units = [
+        SourceUnit(
+            text="ATP synthase uses a proton gradient.",
+            topic="Bio & Chem",
+            source="lecture<1>.md",
+            question="What does ATP synthase use?",
+            answer="A proton gradient.",
+            extra="The source states ATP synthase uses a proton gradient.",
+            tags=["ai-authored"],
+            knowledge_unit_id="unit-atp",
+            knowledge_kind="fact",
+            learning_purpose="recall",
+            origin="source",
+            confidence=0.88,
+        )
+    ]
+    deterministic = build_cards(units)[0]
+    response.write_text(
+        json.dumps(
+            {
+                "cards": [
+                    {
+                        "front": "What does ATP synthase use?",
+                        "back": "A proton gradient.",
+                        "extra": "The source states ATP synthase uses a proton gradient.",
+                        "card_type": "qa",
+                        "tags": ["bio-chem"],
+                        "source_unit_id": units[0].knowledge_unit_id,
+                        "evidence": "ATP synthase uses a proton gradient.",
+                        "confidence": 0.88,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    authored = JsonAiAuthor(FileAiProvider(response)).author(units)[0]
+
+    assert authored.revision_hash == deterministic.revision_hash
 
 
 def test_json_ai_author_rejects_malformed_json(tmp_path):

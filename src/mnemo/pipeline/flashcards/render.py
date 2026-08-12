@@ -10,7 +10,8 @@ from collections import Counter, defaultdict, deque
 from typing import Sequence
 
 from mnemo.core.verbatim import has_inline_verbatim, without_inline_verbatim
-from mnemo.core.identity import fact_id, revision_hash as compute_revision_hash
+from mnemo.core.identity import fact_id
+from .revisions import rendered_card_revision_hash
 
 from .models import DEFAULT_SEED, MAX_COMPONENTS, Card, SourceUnit
 from .patterns import (
@@ -56,17 +57,25 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             else unit.group_components or enumerated_components(raw_back)
         )
         mnemonic = make_mnemonic(components)
-        front = _field(raw_front)
-        back = _field(raw_back)
+        rendered_back = raw_back
         image_url = unit.image_url
         image_alt = normalize_image_alt(unit.image_alt) if image_url else ""
         if image_url:
             card_type = "image-supported"
+            rendered_back = (
+                f'{raw_back}<br><img src="{html.escape(image_url, quote=True)}" '
+                f'alt="{html.escape(image_alt, quote=True)}">'
+            )
+        raw_extra, raw_context = _build_extra_raw(unit, raw_front, rendered_back)
+        front = _field(raw_front)
+        back = _field(raw_back)
+        if image_url:
             back = (
                 f'{back}<br><img src="{html.escape(image_url, quote=True)}" '
                 f'alt="{html.escape(image_alt, quote=True)}">'
             )
-        extra, context = build_extra(unit, front, back)
+        extra = _field(raw_extra)
+        context = _field(raw_context)
         verbatim_tag = ["mnemo-verbatim-code"] if unit.verbatim_kind == "code" else []
         tags = [*unit.tags, *verbatim_tag, slugify(unit.topic), "auto"]
         card_id = stable_card_id(
@@ -77,12 +86,11 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             recall_intent=unit.learning_purpose,
             fact_type=card_type,
         )
-        card_revision = compute_revision_hash(
-            _rendered_card_payload(
-                front=front,
-                back=back,
-                extra=extra,
-                context=context,
+        card_revision = rendered_card_revision_hash(
+                front=raw_front,
+                back=rendered_back,
+                extra=raw_extra,
+                context=raw_context,
                 mnemonic=mnemonic,
                 card_type=card_type,
                 tags=tags,
@@ -97,7 +105,6 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
                 prerequisite_ids=unit.prerequisite_ids,
                 origin=unit.origin,
                 confidence=unit.confidence,
-            )
         )
         card = Card(
             front=front,
@@ -387,16 +394,19 @@ def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> tuple[str,
     ``explanation_is_thin`` at validation. The context trigger uses the
     rendered ``front``/``back`` so it matches the fields the validator inspects.
     """
+    raw_extra, raw_context = _build_extra_raw(unit, front, back)
+    return _field(raw_extra), _field(raw_context)
+
+
+def _build_extra_raw(unit: SourceUnit, front: str = "", back: str = "") -> tuple[str, str]:
     explicit_extra = re.sub(
         r"^Explanation:\s*", "", unit.extra.strip(), flags=re.IGNORECASE
     )
-    explanation = _field(explicit_extra or declarative_statement(unit))
-    topic = _field(unit.topic)
-    source = _field(unit.source)
+    explanation = explicit_extra or declarative_statement(unit)
     if requires_context(front or unit.text, back or unit.question):
-        context = f"{topic} background is assumed; review {source} if unfamiliar."
+        context = f"{unit.topic} background is assumed; review {unit.source} if unfamiliar."
     else:
-        context = f"Topic: {topic}."
+        context = f"Topic: {unit.topic}."
     return explanation, context
 
 
@@ -467,49 +477,6 @@ def stable_card_id(
         return fact_id(unit_id, recall_intent, fact_type)
     digest = hashlib.sha256(f"{front}\0{back}\0{source}".encode()).hexdigest()
     return digest[:16]
-
-
-def _rendered_card_payload(
-    *,
-    front: str,
-    back: str,
-    extra: str,
-    context: str,
-    mnemonic: str,
-    card_type: str,
-    tags: Sequence[str],
-    topic: str,
-    source: str,
-    image_url: str,
-    image_alt: str,
-    knowledge_unit_id: str,
-    knowledge_kind: str,
-    learning_purpose: str,
-    objective_ids: Sequence[str],
-    prerequisite_ids: Sequence[str],
-    origin: str,
-    confidence: float,
-) -> dict[str, object]:
-    return {
-        "front": front,
-        "back": back,
-        "extra": extra,
-        "context": context,
-        "mnemonic": mnemonic,
-        "card_type": card_type,
-        "tags": list(dict.fromkeys(tags)),
-        "topic": topic,
-        "source": source,
-        "image_url": image_url,
-        "image_alt": image_alt,
-        "knowledge_unit_id": knowledge_unit_id,
-        "knowledge_kind": knowledge_kind,
-        "learning_purpose": learning_purpose,
-        "objective_ids": list(objective_ids),
-        "prerequisite_ids": list(prerequisite_ids),
-        "origin": origin,
-        "confidence": confidence,
-    }
 
 
 def _field(value: str) -> str:

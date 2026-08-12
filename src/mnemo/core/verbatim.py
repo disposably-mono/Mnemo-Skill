@@ -73,6 +73,10 @@ def _inline_span_end(text: str, start: int) -> int | None:
     character = text[start]
     if character == "`":
         return _matching_end(text, start, "`", "`")
+    if character == '"' and not _is_escaped(text, start):
+        end = _matching_end(text, start, '"', '"')
+        if end is not None:
+            return end
     if text.startswith(r"\(", start):
         return _matching_end(text, start, r"\(", r"\)")
     if character == "$" and not text.startswith("$$", start) and not _is_escaped(text, start):

@@ -21,8 +21,9 @@ from .patterns import (
     _VERB,
 )
 from .policy import (
-    CLAUSE_MARKER_VERBS,
     CANDIDATE_CARDS_SECTION,
+    CLAUSE_MARKER_VERBS,
+    CLAUSE_SUBORDINATORS,
     GENERIC_PROMPT_STEMS,
     MAX_LIST_ITEMS,
     SEQUENCE_PREFIX_CUES,
@@ -254,6 +255,12 @@ def authored_list_components(answer: str) -> list[str]:
 
 
 def looks_like_clause(value: str) -> bool:
+    stripped = value.strip()
+    first_word = stripped.split()[0].lower().rstrip(",") if stripped.split() else ""
+    if first_word in CLAUSE_SUBORDINATORS:
+        return True
+    if re.search(r"[a-z]{3,}\.\s+[\"']?[A-Z]", stripped):
+        return True
     marker_pattern = "|".join(re.escape(verb) for verb in CLAUSE_MARKER_VERBS)
     return bool(
         re.search(rf"\b(?:{marker_pattern})\b", value, re.I)

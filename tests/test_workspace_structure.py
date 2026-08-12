@@ -106,6 +106,7 @@ def test_workspace_create_builds_course_module_folders_and_metadata(tmp_path) ->
         "moduleSlug: 01-perspective-on-living-systems\n"
         "moduleTitle: Perspective on Living Systems\n"
         "courseSlug: science-11\n"
+        'deck: "Mnemo::Science 11::Perspective on Living Systems"\n'
         "sourceStatus: pending\n"
         "noteStatus: pending\n"
         "cardStatus: pending\n"

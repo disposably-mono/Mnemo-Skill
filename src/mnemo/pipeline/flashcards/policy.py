@@ -48,6 +48,11 @@ SEQUENCE_PREFIX_CUES = (
 
 CLAUSE_MARKER_VERBS = ("was", "were", "appeared", "placed", "challenged")
 
+CLAUSE_SUBORDINATORS = frozenset({
+    "since", "because", "when", "although", "if", "while",
+    "as", "after", "before", "unless", "until", "though",
+})
+
 SEMANTIC_STOPWORDS = frozenset(
     {
         "and", "the", "this", "that", "with", "from", "into", "what", "when",

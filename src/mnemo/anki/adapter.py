@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from mnemo.core.card_schema import FACT_TYPES, Fact
+from mnemo.core.identity import revision_hash as compute_revision_hash
 
 # Default Fact-type -> MONO note type. The registry lives in core.config
 # (config-shaped data); the adapter imports it from there rather than
@@ -158,11 +159,13 @@ def _placeholders(
 ) -> dict[str, str]:
     """The substitution values available to a mapping template, by Fact type."""
     content = fact.content
+    fact_revision_hash = fact.revision_hash or compute_revision_hash(_revision_payload(fact))
     common = {
         "source": _field(fact.source or ""),
         "deck": _field(fact.deck),
         "tags": _field(" ".join(fact.tags)),
         "fact_id": _field(fact.id or ""),
+        "revision_hash": _field(fact_revision_hash),
         "knowledge_unit_id": _field(fact.knowledge_unit_id or ""),
         "knowledge_kind": _field(fact.knowledge_kind or ""),
         "objective_ids": _field(" ".join(fact.objective_ids)),
@@ -236,6 +239,7 @@ def _build_qa(
         "Back": _field(fact.content["back"]),
         "Distractors": _render_confusions(fact),
         "Source": _field(fact.source or ""),
+        **_identity_fields(fact),
     }, [])
 
 
@@ -247,6 +251,7 @@ def _build_code(
         "Code": html.escape(fact.content["back"]),
         "Extra": _field(fact.content.get("extra", "")),
         "Source": _field(fact.source or ""),
+        **_identity_fields(fact),
     }, [])
 
 
@@ -258,6 +263,7 @@ def _build_cloze(
         "Extra": _field(fact.content.get("extra", "")),
         "Distractors": _render_confusions(fact),
         "Source": _field(fact.source or ""),
+        **_identity_fields(fact),
     }, [])
 
 
@@ -268,6 +274,7 @@ def _build_list(
         "Title": _field(fact.content["title"]),
         "Text": _render_list_items(fact),
         "Source": _field(fact.source or ""),
+        **_identity_fields(fact),
     }, [])
 
 
@@ -284,7 +291,32 @@ def _build_typed(
         "Hint 3": _field(hints[2]) if len(hints) > 2 else "",
         "Extra": _field(content.get("extra", "")),
         "Source": _field(fact.source or ""),
+        **_identity_fields(fact),
     }, [])
+
+
+def _identity_fields(fact: Fact) -> dict[str, str]:
+    return {
+        "CardID": _field(fact.id or ""),
+        "RevisionHash": _field(
+            fact.revision_hash or compute_revision_hash(_revision_payload(fact))
+        ),
+    }
+
+
+def _revision_payload(fact: Fact) -> dict[str, Any]:
+    return {
+        "type": fact.type,
+        "content": dict(fact.content),
+        "tags": list(fact.tags),
+        "source": fact.source or "",
+        "knowledge_unit_id": fact.knowledge_unit_id or "",
+        "knowledge_kind": fact.knowledge_kind or "",
+        "objective_ids": list(fact.objective_ids),
+        "prerequisite_ids": list(fact.prerequisite_ids),
+        "origin": fact.origin or "",
+        "confidence": fact.confidence,
+    }
 
 
 def _build_image_occlusion(

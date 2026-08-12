@@ -10,6 +10,7 @@ from collections import Counter, defaultdict, deque
 from typing import Sequence
 
 from mnemo.core.verbatim import has_inline_verbatim, without_inline_verbatim
+from mnemo.core.identity import fact_id, revision_hash as compute_revision_hash
 
 from .models import DEFAULT_SEED, MAX_COMPONENTS, Card, SourceUnit
 from .patterns import (
@@ -68,7 +69,36 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
         extra, context = build_extra(unit, front, back)
         verbatim_tag = ["mnemo-verbatim-code"] if unit.verbatim_kind == "code" else []
         tags = [*unit.tags, *verbatim_tag, slugify(unit.topic), "auto"]
-        card_id = stable_card_id(front, back, unit.source)
+        card_id = stable_card_id(
+            front,
+            back,
+            unit.source,
+            unit_id=unit.knowledge_unit_id,
+            recall_intent=unit.learning_purpose,
+            fact_type=card_type,
+        )
+        card_revision = compute_revision_hash(
+            _rendered_card_payload(
+                front=front,
+                back=back,
+                extra=extra,
+                context=context,
+                mnemonic=mnemonic,
+                card_type=card_type,
+                tags=tags,
+                topic=unit.topic,
+                source=unit.source,
+                image_url=image_url,
+                image_alt=image_alt,
+                knowledge_unit_id=unit.knowledge_unit_id,
+                knowledge_kind=unit.knowledge_kind,
+                learning_purpose=unit.learning_purpose,
+                objective_ids=unit.objective_ids,
+                prerequisite_ids=unit.prerequisite_ids,
+                origin=unit.origin,
+                confidence=unit.confidence,
+            )
+        )
         card = Card(
             front=front,
             back=back,
@@ -82,6 +112,7 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             image_url=image_url,
             image_alt=image_alt,
             card_id=card_id,
+            revision_hash=card_revision,
             knowledge_unit_id=unit.knowledge_unit_id,
             knowledge_kind=unit.knowledge_kind,
             learning_purpose=unit.learning_purpose,
@@ -423,9 +454,62 @@ def normalize_image_alt(alt: str) -> str:
     return f"{alt}; this visual cue anchors the relationship tested by the card."
 
 
-def stable_card_id(front: str, back: str, source: str) -> str:
+def stable_card_id(
+    front: str,
+    back: str,
+    source: str,
+    *,
+    unit_id: str = "",
+    recall_intent: str = "",
+    fact_type: str = "qa",
+) -> str:
+    if unit_id.strip() and recall_intent.strip():
+        return fact_id(unit_id, recall_intent, fact_type)
     digest = hashlib.sha256(f"{front}\0{back}\0{source}".encode()).hexdigest()
     return digest[:16]
+
+
+def _rendered_card_payload(
+    *,
+    front: str,
+    back: str,
+    extra: str,
+    context: str,
+    mnemonic: str,
+    card_type: str,
+    tags: Sequence[str],
+    topic: str,
+    source: str,
+    image_url: str,
+    image_alt: str,
+    knowledge_unit_id: str,
+    knowledge_kind: str,
+    learning_purpose: str,
+    objective_ids: Sequence[str],
+    prerequisite_ids: Sequence[str],
+    origin: str,
+    confidence: float,
+) -> dict[str, object]:
+    return {
+        "front": front,
+        "back": back,
+        "extra": extra,
+        "context": context,
+        "mnemonic": mnemonic,
+        "card_type": card_type,
+        "tags": list(dict.fromkeys(tags)),
+        "topic": topic,
+        "source": source,
+        "image_url": image_url,
+        "image_alt": image_alt,
+        "knowledge_unit_id": knowledge_unit_id,
+        "knowledge_kind": knowledge_kind,
+        "learning_purpose": learning_purpose,
+        "objective_ids": list(objective_ids),
+        "prerequisite_ids": list(prerequisite_ids),
+        "origin": origin,
+        "confidence": confidence,
+    }
 
 
 def _field(value: str) -> str:

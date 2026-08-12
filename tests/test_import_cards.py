@@ -131,23 +131,36 @@ def test_falls_back_to_apkg_when_anki_unavailable(tmp_path):
 
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+_UNREACHABLE_ANKI_URL = "http://127.0.0.1:1"
+
+
+def _write_unreachable_anki_config(path: Path) -> Path:
+    config = path / "config.toml"
+    config.write_text(
+        "[anki]\n"
+        f'ankiconnect_url = "{_UNREACHABLE_ANKI_URL}"\n'
+        "sync_after_import = false\n"
+    )
+    return config
 
 
 def test_cli_runs_as_documented_script(tmp_path):
     """SKILL.md runs `python scripts/import_cards.py ...` directly; that form
-    must work (repo root resolvable) without Anki running -> .apkg fallback."""
+    must work (repo root resolvable) with a forced .apkg fallback."""
     jsonl = tmp_path / "session.jsonl"
     _write_facts(jsonl)
     out = tmp_path / "session.apkg"
+    config = _write_unreachable_anki_config(tmp_path)
 
     proc = subprocess.run(
         [sys.executable, "scripts/import_cards.py", str(jsonl),
-         "--apkg-out", str(out)],
+         "--config", str(config), "--apkg-out", str(out)],
         cwd=_REPO_ROOT, capture_output=True, text=True,
     )
 
     assert proc.returncode == 0, proc.stderr
     assert out.exists()
+    assert str(out) in proc.stdout
 
 
 def test_explicit_apkg_out_path_is_honored(tmp_path):
@@ -206,14 +219,14 @@ def test_main_reads_config_and_mappings_files(tmp_path):
     _write_facts(jsonl)
     cfg = tmp_path / "config.toml"
     cfg.write_text(
-        '[anki]\nankiconnect_url = "http://localhost:18765"\n'
+        f'[anki]\nankiconnect_url = "{_UNREACHABLE_ANKI_URL}"\n'
         '[target_note_types]\nqa = "Basic"\n'
     )
     maps = tmp_path / "mappings.toml"
     maps.write_text('[qa."Basic"]\nFront = "{front}"\nBack = "{back}"\n')
     out = tmp_path / "s.apkg"
 
-    # Custom URL has no Anki listening -> deterministic .apkg fallback.
+    # Custom URL forces a deterministic .apkg fallback.
     code = main([str(jsonl), "--config", str(cfg), "--mappings", str(maps),
                  "--apkg-out", str(out)])
 
@@ -300,13 +313,16 @@ def test_main_reports_live_only_image_occlusion_without_traceback(tmp_path, caps
 
 
 def test_main_returns_zero_and_prints_fallback_summary(tmp_path, capsys):
-    # No Anki running here, so main() (real AnkiConnect, unreachable) falls back.
+    # Force main() onto the offline path even if local Anki is running.
     jsonl = tmp_path / "session.jsonl"
     _write_facts(jsonl)
     out = tmp_path / "session.apkg"
+    config = _write_unreachable_anki_config(tmp_path)
 
-    code = main([str(jsonl), "--apkg-out", str(out)])
+    code = main([str(jsonl), "--config", str(config), "--apkg-out", str(out)])
 
     assert code == 0
     assert out.exists()
-    assert "import" in capsys.readouterr().out.lower()
+    captured = capsys.readouterr()
+    assert "wrote" in captured.out.lower()
+    assert str(out) in captured.out

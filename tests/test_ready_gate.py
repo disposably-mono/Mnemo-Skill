@@ -124,3 +124,36 @@ Extra: The source lists too many items for one supported list card.
     assert generate_main([str(source), "--output", str(output), "--allow-violations"]) == 0
 
     assert ready_main([str(output), "--deck", "Mnemo::Science 11"]) == 2
+
+
+def test_ready_gate_rejects_manifest_with_unknown_csv_unit(tmp_path):
+    from mnemo.pipeline.ready import main as ready_main
+
+    source = tmp_path / "notes.md"
+    output = tmp_path / "notes.csv"
+    source.write_text(
+        "## Candidate Cards\n\nQ: What is alpha?\nA: One.\nExtra: Alpha is the first item.\n",
+        encoding="utf-8",
+    )
+    assert generate_main([str(source), "--output", str(output)]) == 0
+    manifest_path = output.with_suffix(".manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["knowledge_units"] = []
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert ready_main([str(output), "--deck", "Mnemo::Science 11"]) == 2
+
+
+def test_ready_gate_requires_manifest_sidecar(tmp_path):
+    from mnemo.pipeline.ready import main as ready_main
+
+    source = tmp_path / "notes.md"
+    output = tmp_path / "notes.csv"
+    source.write_text(
+        "## Candidate Cards\n\nQ: What is alpha?\nA: One.\nExtra: Alpha is the first item.\n",
+        encoding="utf-8",
+    )
+    assert generate_main([str(source), "--output", str(output)]) == 0
+    output.with_suffix(".manifest.json").unlink()
+
+    assert ready_main([str(output), "--deck", "Mnemo::Science 11"]) == 2

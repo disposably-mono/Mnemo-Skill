@@ -343,6 +343,14 @@ def test_fsrs_rejects_one_day_learning_step():
     assert any(violation.code == "FSRS_LONG_STEP" for violation in violations)
 
 
+def test_fsrs_rejects_day_length_steps_in_minutes_and_hours():
+    cards = build_cards(parse_content(PASSING_NOTES))
+
+    for step in ("1440m", "24h", "1d"):
+        violations = validate_deck(cards, GenerationConfig(scheduler="fsrs", learning_steps=(step,)))
+        assert any(violation.code == "FSRS_LONG_STEP" for violation in violations)
+
+
 def test_retention_hook_uses_only_mature_reviews(tmp_path):
     log = tmp_path / "reviews.csv"
     log.write_text(

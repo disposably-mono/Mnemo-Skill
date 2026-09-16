@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from mnemo.pipeline.audit_cards import build_report, print_report
+from mnemo.pipeline.audit_cards import build_report, load_cards, print_report
 from mnemo.pipeline.import_refined_csv import load_notes
 
 
@@ -42,6 +42,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Manifest validation failed: {deferred} deferred unit(s) remain", file=sys.stderr)
         return 2
     try:
+        validate_manifest_alignment(args.csv, args.csv.with_suffix(".manifest.json"))
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Manifest validation failed: {exc}", file=sys.stderr)
+        return 2
+    try:
         notes, media = load_notes(args.csv, args.deck)
     except (OSError, UnicodeError, ValueError) as exc:
         print(f"Import validation failed: {exc}", file=sys.stderr)
@@ -52,9 +57,32 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def deferred_manifest_units(path: Path) -> int:
     if not path.exists():
-        return 0
+        raise ValueError("manifest sidecar is required")
     data = json.loads(path.read_text(encoding="utf-8"))
     units = data.get("knowledge_units", [])
     if not isinstance(units, list):
         raise ValueError("manifest knowledge_units must be a list")
     return sum(unit.get("status") == "deferred" for unit in units if isinstance(unit, dict))
+
+
+def validate_manifest_alignment(csv_path: Path, manifest_path: Path) -> None:
+    """Ensure the manifest describes the units represented by this CSV."""
+    if not manifest_path.exists():
+        raise ValueError("manifest sidecar is required")
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    units = data.get("knowledge_units")
+    if not isinstance(units, list):
+        raise ValueError("manifest knowledge_units must be a list")
+    manifest_ids = {
+        unit.get("id") for unit in units
+        if isinstance(unit, dict) and isinstance(unit.get("id"), str)
+    }
+    cards, violations = load_cards(csv_path)
+    if violations:
+        raise ValueError("CSV cannot be aligned because it contains parse errors")
+    card_ids = {card.knowledge_unit_id for card in cards if card.knowledge_unit_id}
+    unknown = sorted(card_ids - manifest_ids)
+    if unknown:
+        raise ValueError(
+            "manifest does not describe CSV knowledge units: " + ", ".join(unknown)
+        )

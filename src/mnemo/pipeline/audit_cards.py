@@ -56,7 +56,9 @@ def load_cards(path: Path) -> tuple[list[Card], list[Violation]]:
                         image_url=(row.get("ImageURL") or "").strip(),
                         image_alt=(row.get("ImageAlt") or "").strip(),
                         topic=(row.get("Topic") or "General").strip(),
-                        source=(row.get("Source") or f"{path.name}:line-{line_number}").strip(),
+                        # The CSV row is diagnostic context, not provenance.  Do not
+                        # manufacture a source location when the producer omitted it.
+                        source=(row.get("Source") or "").strip(),
                         card_id=(row.get("CardID") or f"line-{line_number}").strip(),
                         knowledge_unit_id=(row.get("KnowledgeUnitID") or "").strip(),
                         knowledge_kind=(row.get("KnowledgeKind") or "fact").strip(),

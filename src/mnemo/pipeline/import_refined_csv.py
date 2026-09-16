@@ -23,6 +23,7 @@ from mnemo.anki.anki_connect import AnkiConnect, AnkiConnectError
 from mnemo.core.card_schema import CardValidationError, Fact
 from mnemo.core.config import DEFAULT_URL
 from mnemo.anki.note_types import CardTemplate, MONO_CSS, NoteType
+from mnemo.anki.media import bundled_font_paths, unique_media_paths
 from mnemo.pipeline.flashcards.policy import (
     DEFAULT_EASE_PERCENT,
     DEFAULT_EASY_INTERVAL_DAYS,
@@ -430,7 +431,8 @@ def import_refined_csv(
         if actual != fields:
             raise AnkiConnectError(f"{model} fields differ from the refined schema")
     preset_id = apply_legacy_preset(client, deck, preset_id)
-    stored = tuple(client.store_media_files(media_paths))
+    media_to_store = unique_media_paths([*bundled_font_paths(), *media_paths])
+    stored = tuple(client.store_media_files(media_to_store))
     known_notes = existing_card_notes(client, deck)
     existing = [
         (note, known_notes[note.fields["CardID"]])

@@ -411,3 +411,15 @@ def test_refined_import_updates_existing_card_ids_and_adds_new_cards(tmp_path):
     assert report.skipped == 0
     assert client.updated[0][0] == 1
     assert client.updated[0][1].fields["CardID"] == "known"
+
+
+def test_refined_import_uploads_bundled_fonts_with_local_media(tmp_path):
+    client = FakeClient()
+    path = tmp_path / "cards.csv"
+    _write(path, [{"Front": "Q", "Back": "A", "CardType": "qa", "CardID": "font-1"}])
+
+    report, _ = import_refined_csv(path, "Course", client=client)
+
+    assert {"_outfit-variable.ttf", "_dmmono-regular.ttf"}.issubset(
+        set(report.media)
+    )

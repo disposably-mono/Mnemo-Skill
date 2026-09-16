@@ -69,6 +69,9 @@ class SourceUnit:
     image_alt: str = ""
     group_components: list[str] = field(default_factory=list)
     knowledge_unit_id: str = ""
+    # Optional stable discriminator when one source unit intentionally yields
+    # several cards with the same learning purpose.
+    variant_id: str = ""
     knowledge_kind: str = "fact"
     learning_purpose: str = "recall"
     objective_ids: list[str] = field(default_factory=list)

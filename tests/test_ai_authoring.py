@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 
 import pytest
@@ -198,6 +199,57 @@ def test_json_ai_author_rejects_unknown_source_unit_id(tmp_path):
 
     with pytest.raises(AiAuthoringError, match="unknown source_unit_id"):
         JsonAiAuthor(FileAiProvider(response)).author(units)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("front", None), ("back", None), ("extra", None), ("evidence", None),
+     ("source_unit_id", None), ("tags", ["ok", None]), ("confidence", math.nan)],
+)
+def test_json_ai_author_rejects_untyped_or_nonfinite_fields(tmp_path, field, value):
+    response = tmp_path / "cards.json"
+    units = planned_units("Water is H2O.", "chem.md")
+    draft = {
+        "source_unit_id": units[0].knowledge_unit_id,
+        "front": "What is water?", "back": "H2O.",
+        "extra": "Explanation: The source states water is H2O.",
+        "card_type": "qa", "evidence": "Water is H2O.", "tags": [],
+    }
+    draft[field] = value
+    response.write_text(json.dumps({"cards": [draft], "allow_nan": True}), encoding="utf-8")
+    with pytest.raises(AiAuthoringError):
+        JsonAiAuthor(FileAiProvider(response)).author(units)
+
+
+def test_json_ai_author_rejects_wrong_answer_even_with_supported_evidence(tmp_path):
+    response = tmp_path / "cards.json"
+    units = planned_units("Water is H2O.", "chem.md")
+    response.write_text(json.dumps({"cards": [{
+        "source_unit_id": units[0].knowledge_unit_id,
+        "front": "What is water?", "back": "CO2", "extra": "Explanation.",
+        "card_type": "qa", "evidence": "Water is H2O.",
+    }]}), encoding="utf-8")
+    with pytest.raises(AiAuthoringError, match="answer"):
+        JsonAiAuthor(FileAiProvider(response)).author(units)
+
+
+def test_json_ai_author_ignores_ai_source_override(tmp_path):
+    response = tmp_path / "cards.json"
+    units = planned_units("Water is H2O.", "chem.md")
+    response.write_text(json.dumps({"cards": [{
+        "source_unit_id": units[0].knowledge_unit_id,
+        "front": "What is water?", "back": "H2O", "extra": "Explanation.",
+        "card_type": "qa", "evidence": "Water is H2O.",
+        "source": "invented.pdf:p99", "topic": "invented",
+    }]}), encoding="utf-8")
+    cards = JsonAiAuthor(FileAiProvider(response)).author(units)
+    assert cards[0].source == "chem.md:line-1"
+
+
+def test_parse_ai_payload_accepts_one_json_code_fence():
+    from mnemo.pipeline.flashcards.authoring import parse_ai_payload
+
+    assert parse_ai_payload("```json\n{\"cards\": []}\n```") == {"cards": []}
 
 
 def test_command_ai_provider_sends_prompt_on_stdin(tmp_path):

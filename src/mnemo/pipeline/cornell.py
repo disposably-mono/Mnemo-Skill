@@ -364,28 +364,36 @@ def ai_candidate_card(
     if not isinstance(draft, dict):
         raise AiAuthoringError("AI Cornell candidate card must be an object.")
     required = ("source_unit_id", "question", "answer", "extra", "evidence")
-    missing = [field for field in required if not str(draft.get(field, "")).strip()]
+    missing = [
+        field for field in required
+        if not isinstance(draft.get(field), str) or not draft[field].strip()
+    ]
     if missing:
         raise AiAuthoringError(
             f"AI Cornell candidate is missing required fields: {', '.join(missing)}"
         )
-    unit = units_by_id.get(str(draft["source_unit_id"]).strip())
+    unit = units_by_id.get(draft["source_unit_id"].strip())
     if unit is None:
         raise AiAuthoringError("AI Cornell candidate references unknown source_unit_id.")
-    evidence = str(draft["evidence"]).strip()
+    evidence = draft["evidence"].strip()
     if not evidence_is_supported(evidence, unit):
         raise AiAuthoringError(
             "AI Cornell candidate evidence is not present in the referenced source unit."
         )
-    question = plain_line(str(draft["question"]), "question")
-    answer = plain_line(str(draft["answer"]), "answer")
-    extra = plain_line(str(draft["extra"]), "extra")
-    if not evidence_supports_answer(answer, evidence):
+    question = plain_line(draft["question"], "question")
+    answer = plain_line(draft["answer"], "answer")
+    extra = plain_line(draft["extra"], "extra")
+    reviewed_paraphrase = draft.get("reviewed_paraphrase", False)
+    if not isinstance(reviewed_paraphrase, bool):
+        raise AiAuthoringError("AI Cornell reviewed_paraphrase must be boolean.")
+    if not evidence_supports_answer(answer, evidence) and not reviewed_paraphrase:
         raise AiAuthoringError("AI Cornell candidate answer is not supported by its evidence.")
     raw_tags = draft.get("tags", [])
     if not isinstance(raw_tags, list):
         raise AiAuthoringError("AI Cornell candidate tags must be a list.")
-    draft_tags = [plain_line(str(tag), "tag") for tag in raw_tags if str(tag).strip()]
+    if any(not isinstance(tag, str) or not tag.strip() for tag in raw_tags):
+        raise AiAuthoringError("AI Cornell candidate tags must be non-empty strings.")
+    draft_tags = [plain_line(tag, "tag") for tag in raw_tags]
     tags = list(dict.fromkeys([*base_tags, *draft_tags, slugify(unit.topic)]))
     return (
         question,
@@ -403,18 +411,21 @@ def evidence_backed_text(
     if not isinstance(value, dict):
         raise AiAuthoringError(f"AI Cornell response must contain {name}.")
     required = ("text", "source_unit_id", "evidence")
-    missing = [field for field in required if not str(value.get(field, "")).strip()]
+    missing = [
+        field for field in required
+        if not isinstance(value.get(field), str) or not value[field].strip()
+    ]
     if missing:
         raise AiAuthoringError(
             f"AI Cornell {name} is missing required fields: {', '.join(missing)}"
         )
     unit = {unit.knowledge_unit_id: unit for unit in units}.get(
-        str(value["source_unit_id"]).strip()
+        value["source_unit_id"].strip()
     )
     if unit is None:
         raise AiAuthoringError(f"AI Cornell {name} references unknown source_unit_id.")
-    evidence = str(value["evidence"]).strip()
-    text = plain_markdown_paragraph(str(value["text"]), name)
+    evidence = value["evidence"].strip()
+    text = plain_markdown_paragraph(value["text"], name)
     if not evidence_is_supported(evidence, unit):
         raise AiAuthoringError(
             f"AI Cornell {name} evidence is not present in the referenced source unit."
@@ -430,18 +441,21 @@ def evidence_supports_answer(answer: str, evidence: str) -> bool:
     if normalized_answer not in normalized_evidence:
         return False
     content_words = [
-        word
-        for word in re.findall(r"[A-Za-z0-9]+", normalized_answer)
-        if len(word) > 2
+        word for word in re.findall(r"[A-Za-z0-9]+", normalized_answer)
+        if len(word) > 2 or any(character.isdigit() for character in word)
     ]
-    return len(content_words) >= 2
+    return bool(content_words)
 
 
 def coerce_text_lines(value: object, name: str) -> list[str]:
+    if name == "follow_up_gaps" and value == []:
+        return []
     if isinstance(value, str) and value.strip():
         return [plain_line(value, name)]
     if isinstance(value, list):
-        lines = [plain_line(str(item), name) for item in value if str(item).strip()]
+        if any(not isinstance(item, str) or not item.strip() for item in value):
+            raise AiAuthoringError(f"AI Cornell {name} must contain non-empty strings.")
+        lines = [plain_line(item, name) for item in value]
         if lines:
             return lines
     raise AiAuthoringError(f"AI Cornell response must contain {name}.")

@@ -11,6 +11,7 @@ per slide). SKILL.md step 2 runs:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import sys
@@ -92,6 +93,14 @@ def _scanned_page_marker(image_count: int, ocr_attempted: bool) -> str:
     )
 
 
+def _vector_page_marker() -> str:
+    """Visible placeholder for a page containing drawings but no text layer."""
+    return (
+        "[vector-only page: no extractable text layer; page contains vector "
+        "drawings. Inspect or transcribe manually before grounding cards here.]"
+    )
+
+
 def _ocr_page_text(page) -> str:
     """Best-effort OCR of a single page; empty string when OCR is unavailable.
 
@@ -132,14 +141,39 @@ def _extract_pdf_tables(page) -> list[str]:
         _logger.debug("PDF table detection failed for page", exc_info=True)
         return []
     blocks: list[str] = []
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        drawings = []
     for table in finder.tables:
         rows = table.extract()
         if len(rows) < 2 or max((len(row) for row in rows), default=0) < 2:
+            continue
+        bbox = getattr(table, "bbox", None)
+        if bbox is None or not _has_table_grid(drawings, bbox):
+            _logger.debug("discarding table candidate without a visible grid")
             continue
         rendered = _format_pdf_table(rows)
         if rendered:
             blocks.append(f"Table:\n{rendered}")
     return blocks
+
+
+def _has_table_grid(drawings: list[dict], bbox) -> bool:
+    """Require drawing geometry around a candidate to avoid prose false tables."""
+    try:
+        import fitz
+
+        table_rect = fitz.Rect(bbox)
+    except Exception:
+        return False
+    for drawing in drawings:
+        rect = drawing.get("rect")
+        if rect is None or not table_rect.intersects(rect):
+            continue
+        if any(item and item[0] in {"l", "re"} for item in drawing.get("items", [])):
+            return True
+    return False
 
 
 def _looks_like_pdf_math(text: str) -> bool:
@@ -199,7 +233,8 @@ def _is_qualifying_image(info: dict) -> bool:
 
 
 def _extract_pdf_images(
-    doc, page, path: Path, page_number: int, output: Path
+    doc, page, path: Path, page_number: int, output: Path,
+    source_identity: str = "legacy"
 ) -> list[str]:
     """Save qualifying page images and return auditable figure marker lines.
 
@@ -227,7 +262,8 @@ def _extract_pdf_images(
                 continue
             image_number = len(markers) + 1
             filename = (
-                f"{path.stem}-p{page_number}-img{image_number}.{info['ext']}"
+                f"{path.stem}-p{page_number}-img{image_number}-"
+                f"{source_identity}.{info['ext']}"
             )
             saved = output / filename
             saved.write_bytes(info["image"])
@@ -252,11 +288,16 @@ def _ingest_pdf(
     chunks: list[Chunk] = []
     if extract_images is not None:
         extract_images.mkdir(parents=True, exist_ok=True)
+    source_identity = hashlib.sha256(
+        str(path.resolve()).encode("utf-8") + b"\0" + path.read_bytes()
+    ).hexdigest()[:12]
     with fitz.open(str(path)) as doc:
         for index, page in enumerate(doc, start=1):
             source = f"{path.name} p.{index}"
             figures = (
-                _extract_pdf_images(doc, page, path, index, extract_images)
+                _extract_pdf_images(
+                    doc, page, path, index, extract_images, source_identity
+                )
                 if extract_images is not None
                 else []
             )
@@ -271,8 +312,15 @@ def _ingest_pdf(
                 chunks.append(Chunk(text="\n".join(parts), source=source))
                 continue
             image_count = len(page.get_images(full=True))
-            if image_count == 0:
+            try:
+                has_drawings = bool(page.get_drawings())
+            except Exception:
+                has_drawings = False
+            if image_count == 0 and not has_drawings:
                 continue  # genuinely blank page -> nothing to surface
+            if image_count == 0 and has_drawings:
+                chunks.append(Chunk(text=_vector_page_marker(), source=source))
+                continue
             ocr_text = _ocr_page_text(page) if ocr else ""
             if ocr_text:
                 parts = [ocr_text, *figures]
@@ -340,6 +388,32 @@ def _extract_pptx_chart(chart) -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+def _shape_parts(shapes) -> list[str]:
+    """Extract text and structured content recursively, including group shapes."""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    parts: list[str] = []
+    for shape in shapes:
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            parts.extend(_shape_parts(shape.shapes))
+            continue
+        if shape.has_text_frame and shape.text_frame.text.strip():
+            parts.append(shape.text_frame.text)
+        elif shape.has_table:
+            rows = [
+                " | ".join(cell.text.strip() for cell in row.cells)
+                for row in shape.table.rows
+            ]
+            table = "\n".join(row for row in rows if row.strip(" |"))
+            if table:
+                parts.append(table)
+        elif shape.has_chart:
+            chart = _extract_pptx_chart(shape.chart)
+            if chart:
+                parts.append(chart)
+    return parts
+
+
 def _ingest_pptx(path: Path) -> list[Chunk]:
     from pptx import Presentation
 
@@ -347,21 +421,7 @@ def _ingest_pptx(path: Path) -> list[Chunk]:
     prs = Presentation(str(path))
     for index, slide in enumerate(prs.slides, start=1):
         parts: list[str] = []
-        for shape in slide.shapes:
-            if shape.has_text_frame and shape.text_frame.text.strip():
-                parts.append(shape.text_frame.text)
-            elif shape.has_table:
-                rows = [
-                    " | ".join(cell.text.strip() for cell in row.cells)
-                    for row in shape.table.rows
-                ]
-                table = "\n".join(row for row in rows if row.strip(" |"))
-                if table:
-                    parts.append(table)
-            elif shape.has_chart:
-                chart = _extract_pptx_chart(shape.chart)
-                if chart:
-                    parts.append(chart)
+        parts.extend(_shape_parts(slide.shapes))
         if slide.has_notes_slide:
             notes = slide.notes_slide.notes_text_frame.text.strip()
             if notes:

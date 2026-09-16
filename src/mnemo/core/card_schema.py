@@ -25,7 +25,8 @@ FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list", "typed", "image_occlusion"
 GRADES: tuple[str, ...] = ("far", "medium", "near")
 
 # A cloze deletion looks like {{c1::answer}} (optionally {{c1::answer::hint}}).
-_CLOZE_MARKER = re.compile(r"\{\{c\d+::")
+_CLOZE_PREFIX = re.compile(r"\{\{c\d*::")
+_CLOZE_MARKER = re.compile(r"\{\{c([1-9]\d*)::([^{}]+?)(?:::([^{}]*))?\}\}")
 
 # Anki splits tags on whitespace, so a tag may not contain any.
 _WHITESPACE = re.compile(r"\s")
@@ -241,9 +242,14 @@ def _validate_cloze(content: dict[str, Any]) -> None:
     text = content.get("text")
     if not isinstance(text, str) or not text.strip():
         raise CardValidationError("cloze content requires non-empty 'text'")
-    if not _CLOZE_MARKER.search(without_inline_verbatim(text)):
+    visible_text = without_inline_verbatim(text)
+    prefixes = list(_CLOZE_PREFIX.finditer(visible_text))
+    markers = list(_CLOZE_MARKER.finditer(visible_text))
+    if not markers or len(prefixes) != len(markers) or any(
+        not match.group(2).strip() for match in markers
+    ):
         raise CardValidationError(
-            "cloze content must contain a cloze deletion like {{c1::answer}}"
+            "cloze content must contain only valid deletions like {{c1::answer}}"
         )
     _validate_optional_str(content, "extra", "cloze")
     _validate_optional_str(content, "context", "cloze")

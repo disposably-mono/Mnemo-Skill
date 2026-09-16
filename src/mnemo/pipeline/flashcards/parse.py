@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Sequence
 
 from mnemo.core.knowledge import (
@@ -331,9 +331,18 @@ def starts_new_structured_line(previous: str, current: str) -> bool:
 
 
 def plan_knowledge(
-    units: Sequence[SourceUnit], source_text: str, source_name: str
-) -> tuple[list[LearningObjective], list[KnowledgeUnit]]:
-    """Classify parsed units and connect them to explicit or inferred objectives."""
+    units: Sequence[SourceUnit], source_text: str, source_name: str, *,
+    mutate: bool = True, return_units: bool = False,
+) -> tuple[list[LearningObjective], list[KnowledgeUnit]] | tuple[
+    list[LearningObjective], list[KnowledgeUnit], list[SourceUnit]
+]:
+    """Classify units without mutation when ``mutate=False``.
+
+    ``mutate=True`` preserves the legacy API. New callers should use the
+    immutable mode and retain the returned enriched units from
+    :func:`enriched_units`.
+    """
+    working_units = list(units) if mutate else [replace(unit) for unit in units]
     explicit = extract_explicit_objectives(source_text, source_name)
     explicit_topics = {objective.topic for objective in explicit}
     inferred = infer_topic_objectives(
@@ -346,7 +355,7 @@ def plan_knowledge(
 
     knowledge_units: list[KnowledgeUnit] = []
     definitions_by_topic: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    for unit in units:
+    for unit in working_units:
         if unit.verbatim_kind:
             kind, purpose = "fact", "recall"
         else:
@@ -384,6 +393,8 @@ def plan_knowledge(
             term = term or (match.group("subject").strip() if match else "")
             if term:
                 definitions_by_topic[unit.topic].append((term, unit_id))
+    if return_units:
+        return objectives, knowledge_units, working_units
     return objectives, knowledge_units
 
 

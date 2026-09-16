@@ -76,6 +76,19 @@ def test_build_cards_uses_explicit_variant_id_for_stable_identity():
     )
 
 
+def test_plan_knowledge_immutable_mode_does_not_change_input_units():
+    unit = SourceUnit(text="Water boils at 100 C.", topic="Physics", source="x.md")
+    before = unit.__dict__.copy()
+
+    _, knowledge, enriched = plan_knowledge(
+        [unit], unit.text, unit.source, mutate=False, return_units=True
+    )
+
+    assert unit.__dict__ == before
+    assert enriched[0] is not unit
+    assert knowledge[0].id == enriched[0].knowledge_unit_id
+
+
 def _texts(units):
     return [unit.text for unit in units]
 

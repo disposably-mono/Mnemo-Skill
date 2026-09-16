@@ -2,14 +2,16 @@
 
 ## Integrated workstreams
 
-Approved order was WS1 → WS2 → WS4 → WS5 → WS3. Each branch was isolated in
+Approved order was WS1 → WS2 → WS4 → WS5 → WS3, followed by approved follow-up
+workstreams WS6 and WS7. Each branch was isolated in
 `.worktrees/`, rebased onto `main`, and retained for audit. The final merge
 commits are `9ec75ac` (WS1), `7a74d13` (WS2), `2a8bb94` (WS4), `2f8485a`
-(WS5), and `bce70e5` (WS3 integration). Detailed reports: [WS1](WS1_REPORT.md),
+(WS5), `bce70e5` (WS3 integration), `fea4ee3` (WS6), and `93f40ea` (WS7).
+Detailed reports: [WS1](WS1_REPORT.md),
 [WS2](WS2_REPORT.md), [WS3](WS3_REPORT.md), [WS4](WS4_REPORT.md), and
-[WS5](WS5_REPORT.md).
+[WS5](WS5_REPORT.md), [WS6](WS6_REPORT.md), and [WS7](WS7_REPORT.md).
 
-Closed findings: T1, T2, T13, T14, T15, T16, T17, T18, T19, T20, T21, and the
+Closed findings: T1, T2, T4, T5, T6, T13, T14, T15, T16, T17, T18, T19, T20, T21, and the
 completed portions of T3, T5, T10, T11, T12, and T22. The integrated cloze
 validator retains both WS1 balanced/non-empty checks and WS3 residual-syntax
 checks.
@@ -20,7 +22,7 @@ Final isolated command:
 
 ```text
 unshare --user --map-root-user --net pytest -q --cov=mnemo --cov-report=term -p no:cacheprovider
-349 passed; 87.78% total coverage (80% threshold met)
+349 passed; 87.72% total coverage (80% threshold met)
 ```
 
 `git diff --check` was clean. The existing test suite emits only dependency
@@ -40,8 +42,8 @@ source/output stages were exercised with the preserved generated session.
 
 ## Deferred findings and residual risks
 
-- T4/T6: live add/update planning and complete partial-failure reconciliation
-  remain for a future Anki importer pass.
+- T4/T6: CardID-based update and explicit partial-add outcomes are now handled;
+  duplicate CardID ambiguity and non-transactional sequential updates remain.
 - T7/T8/T9/T10: full annotation preservation, additive model migration, and
   bundled-font upload policy are not complete in this pass.
 - T14: borderless genuine PDF tables remain conservatively unstructured.

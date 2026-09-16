@@ -78,6 +78,17 @@ def test_qa_distractors_render_grouped_confusions():
     assert html.index("Sydney") < html.index("Auckland")
 
 
+def test_qa_preserves_optional_annotations_on_basic_note():
+    note = adapt(_qa(content={
+        "front": "What?", "back": "Answer", "extra": "Why",
+        "context": "Prerequisite", "mnemonic": "Hook",
+    }))
+
+    assert "Extra:</b> Why" in note.fields["Back"]
+    assert "Context:</b> Prerequisite" in note.fields["Back"]
+    assert "Mnemonic:</b> Hook" in note.fields["Back"]
+
+
 def test_cloze_maps_to_mono_cloze():
     fact = Fact.from_dict({
         "type": "cloze",

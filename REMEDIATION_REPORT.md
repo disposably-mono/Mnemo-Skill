@@ -52,7 +52,7 @@ source/output stages were exercised with the preserved generated session.
   newlines. T9/T10 model migration and bundled-font upload are implemented for
   refined imports.
 - T14: borderless genuine PDF tables remain conservatively unstructured.
-- T20: sidecars are aligned by unit IDs but are not yet fingerprinted.
+- T20: sidecars now carry CSV fingerprints; older sidecars must be regenerated.
 - T22: immutable `plan_knowledge()` requires coordinated API changes.
 - T23: local media paths are constrained to their roots; remote image URLs can
   be rejected explicitly with `--deny-remote-images`, while image-occlusion
@@ -65,6 +65,6 @@ all post-remediation verification used network isolation and fake clients.
 
 ## Recommended next steps
 
-Implement importer transaction/outcome reconciliation and CardID-based update
-semantics first, then sidecar fingerprinting and security/media policy. Add a
-recorded LLM response fixture to enable a truly reproducible full pipeline test.
+Add a recorded LLM response fixture to enable a truly reproducible full
+pipeline test, and consider an explicit per-variant identity field plus a
+transaction-capable Anki integration if the API becomes available.

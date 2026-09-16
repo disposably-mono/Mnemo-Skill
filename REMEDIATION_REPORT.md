@@ -3,16 +3,17 @@
 ## Integrated workstreams
 
 Approved order was WS1 → WS2 → WS4 → WS5 → WS3, followed by approved follow-up
-workstreams WS6, WS7, WS8, WS9, WS10, and WS11. Each branch was isolated in
+workstreams WS6, WS7, WS8, WS9, WS10, WS11, WS12, and WS13. Each branch was isolated in
 `.worktrees/`, rebased onto `main`, and retained for audit. The final merge
 commits are `9ec75ac` (WS1), `7a74d13` (WS2), `2a8bb94` (WS4), `2f8485a`
 (WS5), `bce70e5` (WS3 integration), `fea4ee3` (WS6), `93f40ea` (WS7),
-`71b6385` (WS8), `1ecc5a7` (WS9), `4d98891` (WS10), and `8483bc0` (WS11).
+`71b6385` (WS8), `1ecc5a7` (WS9), `4d98891` (WS10), `8483bc0` (WS11),
+`ca8aad9` (WS12), and `9066ae4` (WS13).
 Detailed reports: [WS1](WS1_REPORT.md),
 [WS2](WS2_REPORT.md), [WS3](WS3_REPORT.md), [WS4](WS4_REPORT.md), and
 [WS5](WS5_REPORT.md), [WS6](WS6_REPORT.md), [WS7](WS7_REPORT.md),
-[WS8](WS8_REPORT.md), [WS9](WS9_REPORT.md), [WS10](WS10_REPORT.md), and
-[WS11](WS11_REPORT.md).
+[WS8](WS8_REPORT.md), [WS9](WS9_REPORT.md), [WS10](WS10_REPORT.md),
+[WS11](WS11_REPORT.md), [WS12](WS12_REPORT.md), and [WS13](WS13_REPORT.md).
 
 Closed findings: T1, T2, T3, T4, T5, T6, T10, T11, T12, T13, T14, T15, T16, T17,
 T18, T19, T20, T21, and completed portions of T22. The integrated cloze
@@ -51,9 +52,11 @@ source/output stages were exercised with the preserved generated session.
   rendering converts prose line endings to `<br>` while code retains literal
   newlines. T9/T10 model migration and bundled-font upload are implemented for
   refined imports.
-- T14: borderless genuine PDF tables remain conservatively unstructured.
+- T14: borderless genuine PDF tables are now retained as explicit review
+  candidates rather than silently discarded.
 - T20: sidecars now carry CSV fingerprints; older sidecars must be regenerated.
-- T22: immutable `plan_knowledge()` requires coordinated API changes.
+- T22: immutable `plan_knowledge(..., mutate=False, return_units=True)` is
+  available; legacy callers retain compatibility mode.
 - T23: local media paths are constrained to their roots; remote image URLs can
   be rejected explicitly with `--deny-remote-images`, while image-occlusion
   media always rejects remote URLs.
@@ -65,6 +68,7 @@ all post-remediation verification used network isolation and fake clients.
 
 ## Recommended next steps
 
-Add a recorded LLM response fixture to enable a truly reproducible full
-pipeline test, and consider an explicit per-variant identity field plus a
-transaction-capable Anki integration if the API becomes available.
+Use `mnemo-refresh-sidecars` when upgrading legacy generated outputs, prefer
+immutable planning mode for new callers, and provide explicit `variant_id`
+values in AI/source-unit payloads. A true transaction-capable Anki integration
+would still require API support beyond AnkiConnect.

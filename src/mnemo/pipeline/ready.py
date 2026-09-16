@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from mnemo.pipeline.audit_cards import build_report, load_cards, print_report
+from mnemo.pipeline.flashcards.io import sha256_file
 from mnemo.pipeline.import_refined_csv import load_notes
 
 
@@ -42,7 +43,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Manifest validation failed: {deferred} deferred unit(s) remain", file=sys.stderr)
         return 2
     try:
-        validate_manifest_alignment(args.csv, args.csv.with_suffix(".manifest.json"))
+        manifest_path = args.csv.with_suffix(".manifest.json")
+        coverage_path = args.coverage or args.csv.with_suffix(".coverage.json")
+        validate_manifest_alignment(args.csv, manifest_path)
+        validate_sidecar_freshness(args.csv, manifest_path, coverage_path)
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print(f"Manifest validation failed: {exc}", file=sys.stderr)
         return 2
@@ -86,3 +90,26 @@ def validate_manifest_alignment(csv_path: Path, manifest_path: Path) -> None:
         raise ValueError(
             "manifest does not describe CSV knowledge units: " + ", ".join(unknown)
         )
+
+
+def validate_sidecar_freshness(
+    csv_path: Path, manifest_path: Path, coverage_path: Path
+) -> None:
+    """Reject sidecars generated for a different CSV or objective manifest."""
+    expected = sha256_file(csv_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+    for label, data in (("manifest", manifest), ("coverage", coverage)):
+        fingerprint = data.get("fingerprints", {}).get("csv_sha256")
+        if fingerprint != expected:
+            raise ValueError(f"{label} sidecar is stale or missing its CSV fingerprint")
+    manifest_objectives = {
+        item.get("id") for item in manifest.get("objectives", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    coverage_objectives = {
+        item.get("id") for item in coverage.get("objectives", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    if manifest_objectives != coverage_objectives:
+        raise ValueError("manifest and coverage sidecars describe different objectives")

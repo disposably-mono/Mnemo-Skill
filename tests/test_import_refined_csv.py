@@ -4,6 +4,7 @@ import json
 import pytest
 
 from mnemo.core.card_schema import CardValidationError
+from mnemo.anki.anki_connect import AnkiConnectError
 from mnemo.pipeline.generate_flashcards import SourceUnit, build_cards
 from mnemo.pipeline.import_refined_csv import (
     BASIC_MODEL,
@@ -466,6 +467,42 @@ def test_refined_import_updates_existing_card_ids_and_adds_new_cards(tmp_path):
     assert report.skipped == 0
     assert client.updated[0][0] == 1
     assert client.updated[0][1].fields["CardID"] == "known"
+
+
+def test_refined_import_reconciles_update_failures_without_overstating_success(tmp_path):
+    class PartiallyFailingClient(FakeClient):
+        def update_note(self, note, note_id):
+            super().update_note(note, note_id)
+            if note.fields["CardID"] == "known":
+                raise AnkiConnectError("temporary Anki error")
+
+    client = PartiallyFailingClient()
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Updated", "Back": "Answer", "CardType": "qa", "CardID": "known",
+    }])
+
+    report, _ = import_refined_csv(path, "Existing", client=client)
+
+    assert report.updated == 0
+    assert report.failed_card_ids == ("known",)
+    assert report.failure_messages == (
+        "could not update existing CardID 'known' (note 1): temporary Anki error",
+    )
+
+
+def test_existing_card_notes_rejects_duplicate_stable_ids():
+    class DuplicateClient(FakeClient):
+        def _invoke(self, action, **params):
+            if action == "notesInfo":
+                return [
+                    {"noteId": 1, "fields": {"CardID": {"value": "same"}}},
+                    {"noteId": 2, "fields": {"CardID": {"value": "same"}}},
+                ]
+            return super()._invoke(action, **params)
+
+    with pytest.raises(AnkiConnectError, match="duplicate notes"):
+        existing_card_ids(DuplicateClient(), "Existing")
 
 
 def test_refined_import_uploads_bundled_fonts_with_local_media(tmp_path):

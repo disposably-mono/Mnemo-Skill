@@ -77,7 +77,7 @@ def to_genanki_note(note: AnkiNote, note_type: NoteType) -> genanki.Note:
     genanki = _genanki()
     model = model_for(note_type)
     fields = [note.fields.get(name, "") for name in note_type.fields]
-    card_id = note.fields.get("CardID") or ""
+    card_id = note.fields.get("CardID") or note.identity or ""
     guid = genanki.guid_for(note.model, card_id) if card_id else None
     return genanki.Note(model=model, fields=fields, tags=list(note.tags), guid=guid)
 

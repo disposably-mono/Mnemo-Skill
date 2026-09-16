@@ -292,7 +292,7 @@ def _collect_local_image(
     return _field(image_url)
 
 
-def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> None:
+def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> AnkiNote:
     """Copy presentation-only CSV columns into the rendered note.
 
     CardType, ImageURL, ImageAlt (and the cloze model's Back field) are
@@ -308,9 +308,14 @@ def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> N
         "Back": _field(_csv_text(row.get("Back") or "")),
     }
     model_fields = _NOTE_TYPES_BY_MODEL[note.model].fields
+    fields = dict(note.fields)
     for name, value in passthrough.items():
-        if name in model_fields and name not in note.fields:
-            note.fields[name] = value
+        if name in model_fields and name not in fields:
+            fields[name] = value
+    return AnkiNote(
+        model=note.model, deck=note.deck, fields=fields,
+        tags=list(note.tags), media=list(note.media), identity=note.identity,
+    )
 
 
 def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
@@ -327,10 +332,20 @@ def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
             except CardValidationError as exc:
                 raise ValueError(f"line {line_number}: {exc}") from exc
             image_url = _collect_local_image(row, csv_path.parent, media)
-            note = adapt(fact, mappings=REFINED_MAPPINGS)
-            _apply_passthrough(note, row, image_url)
+            note = _apply_passthrough(
+                adapt(fact, mappings=REFINED_MAPPINGS), row, image_url
+            )
             notes.append(note)
     return notes, list(media)
+
+
+def _reject_duplicate_card_ids(notes: list[AnkiNote]) -> None:
+    seen: set[str] = set()
+    for note in notes:
+        card_id = note.fields.get("CardID", "").strip()
+        if card_id in seen:
+            raise ValueError(f"duplicate CardID in input: {card_id!r}")
+        seen.add(card_id)
 
 
 def existing_card_ids(client: AnkiConnect, deck: str) -> set[str]:
@@ -390,6 +405,12 @@ def import_refined_csv(
     client = client or AnkiConnect()
     if not client.is_available():
         raise AnkiConnectError("AnkiConnect is unavailable; open Anki and retry")
+    # Parse and validate all local input before touching Anki state.
+    notes, media_paths = load_notes(csv_path, deck)
+    _reject_duplicate_card_ids(notes)
+    validator = getattr(client, "validate_note_type_fields", None)
+    if validator is not None:
+        validator((REFINED_BASIC, REFINED_CLOZE, REFINED_TYPED))
     client.ensure_note_types((REFINED_BASIC, REFINED_CLOZE, REFINED_TYPED))
     expected = {
         REFINED_BASIC.name: list(REFINED_BASIC.fields),
@@ -401,7 +422,6 @@ def import_refined_csv(
         if actual != fields:
             raise AnkiConnectError(f"{model} fields differ from the refined schema")
     preset_id = apply_legacy_preset(client, deck, preset_id)
-    notes, media_paths = load_notes(csv_path, deck)
     stored = tuple(client.store_media_files(media_paths))
     known_ids = existing_card_ids(client, deck)
     pending = [note for note in notes if note.fields["CardID"] not in known_ids]

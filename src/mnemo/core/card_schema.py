@@ -13,6 +13,7 @@ adapter (``scripts/adapter``) later renders it into concrete Anki note fields.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,8 +26,9 @@ FACT_TYPES: tuple[str, ...] = ("qa", "cloze", "list", "typed", "image_occlusion"
 GRADES: tuple[str, ...] = ("far", "medium", "near")
 
 # A cloze deletion looks like {{c1::answer}} (optionally {{c1::answer::hint}}).
-_CLOZE_PREFIX = re.compile(r"\{\{c\d*::")
 _CLOZE_MARKER = re.compile(r"\{\{c([1-9]\d*)::([^{}]+?)(?:::([^{}]*))?\}\}")
+_CLOZE_ANY_MARKER = re.compile(r"\{\{c[^{}]*\}\}")
+_CLOZE_PREFIX = re.compile(r"\{\{c\d*::")
 
 # Anki splits tags on whitespace, so a tag may not contain any.
 _WHITESPACE = re.compile(r"\s")
@@ -245,12 +247,17 @@ def _validate_cloze(content: dict[str, Any]) -> None:
     visible_text = without_inline_verbatim(text)
     prefixes = list(_CLOZE_PREFIX.finditer(visible_text))
     markers = list(_CLOZE_MARKER.finditer(visible_text))
-    if not markers or len(prefixes) != len(markers) or any(
-        not match.group(2).strip() for match in markers
+    if (
+        not markers
+        or len(prefixes) != len(markers)
+        or any(not match.group(2).strip() for match in markers)
     ):
         raise CardValidationError(
             "cloze content must contain only valid deletions like {{c1::answer}}"
         )
+    remainder = _CLOZE_MARKER.sub("", visible_text)
+    if _CLOZE_ANY_MARKER.search(remainder) or "{{c" in remainder:
+        raise CardValidationError("cloze content contains malformed deletion syntax")
     _validate_optional_str(content, "extra", "cloze")
     _validate_optional_str(content, "context", "cloze")
     _validate_annotations(content, "cloze")
@@ -356,7 +363,7 @@ def _validate_occlusion_mask(mask: Any) -> None:
 def _validate_normalized_number(value: Any, label: str) -> None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise CardValidationError(f"{label} must be a number between 0 and 1")
-    if value < 0 or value > 1:
+    if not math.isfinite(value) or value < 0 or value > 1:
         raise CardValidationError(f"{label} must be between 0 and 1")
 
 

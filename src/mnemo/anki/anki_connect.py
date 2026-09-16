@@ -55,14 +55,36 @@ class AnkiConnect:
     def _invoke(self, action: str, **params: Any) -> Any:
         requests = _requests()
         payload = {"action": action, "version": API_VERSION, "params": params}
-        response = requests.post(self.url, json=payload, timeout=self.timeout)
-        response.raise_for_status()
-        data = response.json()
+        try:
+            response = requests.post(self.url, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as exc:
+            raise AnkiConnectError(
+                f"AnkiConnect {action} request failed: {exc}"
+            ) from exc
+        except ValueError as exc:
+            raise AnkiConnectError(
+                f"AnkiConnect {action} returned invalid JSON"
+            ) from exc
         if not isinstance(data, dict) or "error" not in data or "result" not in data:
             raise AnkiConnectError(f"malformed AnkiConnect response: {data!r}")
         if data["error"] is not None:
             raise AnkiConnectError(str(data["error"]))
         return data["result"]
+
+    def validate_note_type_fields(self, note_types: Iterable[NoteType]) -> None:
+        """Check existing model fields before any model/template mutation."""
+        existing = set(self.model_names())
+        for note_type in note_types:
+            if note_type.name not in existing:
+                continue
+            actual = self._invoke("modelFieldNames", modelName=note_type.name)
+            expected = list(note_type.fields)
+            if actual != expected:
+                raise AnkiConnectError(
+                    f"{note_type.name} fields differ from the expected schema"
+                )
 
     def is_available(self) -> bool:
         """True if AnkiConnect answers (Anki desktop open with the add-on)."""

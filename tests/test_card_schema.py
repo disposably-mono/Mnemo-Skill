@@ -89,6 +89,25 @@ def test_valid_image_occlusion_fact():
     assert len(fact.content["masks"]) == 2
 
 
+@pytest.mark.parametrize("text", [
+    "Water is {{c0::H2O}}.",
+    "Water is {{c1::}}.",
+    "Water is {{c1::H2O}.",
+])
+def test_cloze_rejects_malformed_markers(text):
+    with pytest.raises(CardValidationError):
+        Fact.from_dict({"type": "cloze", "content": {"text": text},
+                        "deck": "D", "tags": []})
+
+
+def test_image_occlusion_rejects_nonfinite_coordinates():
+    with pytest.raises(CardValidationError, match="between 0 and 1"):
+        Fact.from_dict({"type": "image_occlusion", "content": {
+            "image": "x.png", "masks": [{"shape": "rect", "left": float("nan"),
+            "top": 0, "width": 0.5, "height": 0.5}],
+        }, "deck": "D", "tags": []})
+
+
 def test_qa_fact_with_graded_distractors():
     fact = Fact.from_dict(
         {

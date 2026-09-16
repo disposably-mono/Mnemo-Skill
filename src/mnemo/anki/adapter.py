@@ -39,6 +39,7 @@ class AnkiNote:
     fields: dict[str, str]
     tags: list[str] = field(default_factory=list)
     media: list[Path] = field(default_factory=list)
+    identity: str | None = None
 
 
 Mappings = dict[str, dict[str, dict[str, str]]]
@@ -137,6 +138,7 @@ def adapt(
             fields=fields,
             tags=list(fact.tags),
             media=media,
+            identity=fact.id,
         )
 
     builder = _build_code if model_name == "MONO Code" else _BUILDERS[fact.type]
@@ -147,6 +149,7 @@ def adapt(
         fields=fields,
         tags=list(fact.tags),
         media=media,
+        identity=fact.id,
     )
 
 

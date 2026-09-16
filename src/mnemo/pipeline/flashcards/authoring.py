@@ -7,13 +7,14 @@ import math
 import re
 import shlex
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol, Sequence
 
 from .models import CARD_TYPES, Card, SourceUnit
 from .policy import DEFAULT_AI_COMMAND_TIMEOUT_S
-from .render import _field, build_cards, requires_context, stable_card_id
+from .render import _field, build_cards, requires_context, slugify, stable_card_id
+from .revisions import rendered_card_revision_hash
 
 
 class AiAuthoringError(ValueError):
@@ -82,9 +83,32 @@ class JsonAiAuthor:
             raise AiAuthoringError("AI response must contain a cards list.")
         units_by_id = {unit.knowledge_unit_id: unit for unit in units}
         cards = [draft_to_card(draft, units_by_id) for draft in drafts]
+        cards = _disambiguate_card_ids(cards)
         if not cards:
             raise AiAuthoringError("AI response did not contain any card drafts.")
         return cards
+
+
+def _disambiguate_card_ids(cards: Sequence[Card]) -> list[Card]:
+    """Keep semantic IDs stable while making same-unit variants distinct."""
+    occurrences: dict[str, int] = {}
+    result: list[Card] = []
+    for card in cards:
+        card_id = card.card_id
+        occurrence = occurrences.get(card_id, 0)
+        if occurrence:
+            card_id = stable_card_id(
+                card.front,
+                card.back,
+                card.source,
+                unit_id=card.knowledge_unit_id,
+                recall_intent=card.learning_purpose,
+                fact_type=card.card_type,
+                variant=f"variant-{occurrence + 1}",
+            )
+        occurrences[card.card_id] = occurrence + 1
+        result.append(replace(card, card_id=card_id))
+    return result
 
 
 def build_authoring_prompt(units: Sequence[SourceUnit]) -> str:
@@ -169,8 +193,10 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
     card_type = draft["card_type"].strip()
     if card_type not in CARD_TYPES:
         raise AiAuthoringError(f"AI card draft has unknown card_type: {card_type}")
-    front = _field(draft["front"])
-    back = _field(draft["back"])
+    raw_front = draft["front"]
+    raw_back = draft["back"]
+    front = _field(raw_front)
+    back = _field(raw_back)
     if not answer_is_supported(back, evidence):
         raise AiAuthoringError("AI card answer is not supported by its evidence.")
     raw_tags = draft.get("tags", [])
@@ -188,19 +214,52 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
         raise AiAuthoringError("AI card confidence must be numeric.") from exc
     if not math.isfinite(confidence_value) or not 0 <= confidence_value <= 1:
         raise AiAuthoringError("AI card confidence must be finite and between 0 and 1.")
+    raw_extra = draft["extra"]
+    raw_mnemonic = str(draft.get("mnemonic", ""))
     draft_context = str(draft.get("context", "")).strip()
-    context = _field(draft_context) if draft_context else default_context(unit, front, back)
+    raw_context = draft_context or (
+        f"{unit.topic} background is assumed; review {unit.source} if unfamiliar."
+        if requires_context(raw_front, raw_back)
+        else f"Topic: {unit.topic}."
+    )
+    context = _field(raw_context)
+    card_tags = [*unit.tags, *tags, "ai-authored", slugify(unit.topic), "auto"]
     return Card(
         front=front,
         back=back,
-        extra=_field(draft["extra"]),
+        extra=_field(raw_extra),
         context=context,
         mnemonic=_field(str(draft.get("mnemonic", ""))),
         card_type=card_type,
-        tags=[*unit.tags, *tags, "ai-authored", "auto"],
+        tags=card_tags,
         topic=_field(unit.topic),
         source=_field(unit.source),
-        card_id=stable_card_id(front, back, unit.source),
+        card_id=stable_card_id(
+            front, back, unit.source,
+            unit_id=unit.knowledge_unit_id,
+            recall_intent=unit.learning_purpose,
+            fact_type=card_type,
+        ),
+        revision_hash=rendered_card_revision_hash(
+            front=raw_front,
+            back=raw_back,
+            extra=raw_extra,
+            context=raw_context,
+            mnemonic=raw_mnemonic,
+            card_type=card_type,
+            tags=card_tags,
+            topic=unit.topic,
+            source=unit.source,
+            image_url="",
+            image_alt="",
+            knowledge_unit_id=unit.knowledge_unit_id,
+            knowledge_kind=unit.knowledge_kind,
+            learning_purpose=unit.learning_purpose,
+            objective_ids=unit.objective_ids,
+            prerequisite_ids=unit.prerequisite_ids,
+            origin=unit.origin,
+            confidence=confidence_value,
+        ),
         knowledge_unit_id=unit.knowledge_unit_id,
         knowledge_kind=unit.knowledge_kind,
         learning_purpose=unit.learning_purpose,

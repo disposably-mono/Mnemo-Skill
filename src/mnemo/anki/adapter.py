@@ -13,6 +13,7 @@ from __future__ import annotations
 import html
 import re
 import tomllib
+import string
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -296,11 +297,17 @@ def _build_typed(
 
 
 def _identity_fields(fact: Fact) -> dict[str, str]:
+    expected = compute_revision_hash(_revision_payload(fact))
+    supplied = fact.revision_hash or ""
+    # Legacy labels (for example ``rev-atp-v1``) remain readable, but a
+    # canonical-looking hash must never be allowed to become stale metadata.
+    if supplied and len(supplied) == 64 and all(c in string.hexdigits for c in supplied):
+        revision = supplied if supplied == expected else expected
+    else:
+        revision = supplied or expected
     return {
         "CardID": _field(fact.id or ""),
-        "RevisionHash": _field(
-            fact.revision_hash or compute_revision_hash(_revision_payload(fact))
-        ),
+        "RevisionHash": _field(revision),
     }
 
 
@@ -309,7 +316,9 @@ def _revision_payload(fact: Fact) -> dict[str, Any]:
         "type": fact.type,
         "content": dict(fact.content),
         "tags": list(fact.tags),
+        "deck": fact.deck,
         "source": fact.source or "",
+        "distractors": [d.to_dict() for d in fact.distractors],
         "knowledge_unit_id": fact.knowledge_unit_id or "",
         "knowledge_kind": fact.knowledge_kind or "",
         "objective_ids": list(fact.objective_ids),

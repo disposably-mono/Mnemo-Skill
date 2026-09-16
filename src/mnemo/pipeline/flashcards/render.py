@@ -43,6 +43,7 @@ from .text import (
 
 def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
     cards: list[Card] = []
+    id_occurrences: dict[str, int] = {}
     type_counts: Counter[str] = Counter()
     for index, unit in enumerate(units):
         if unit.question and unit.answer and should_defer_authored_answer(unit.answer):
@@ -86,6 +87,21 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             recall_intent=unit.learning_purpose,
             fact_type=card_type,
         )
+        occurrence = id_occurrences.get(card_id, 0)
+        if occurrence:
+            card_id = stable_card_id(
+                front,
+                back,
+                unit.source,
+                unit_id=unit.knowledge_unit_id,
+                recall_intent=unit.learning_purpose,
+                fact_type=card_type,
+                variant=f"variant-{occurrence + 1}",
+            )
+        id_occurrences[stable_card_id(
+            front, back, unit.source, unit_id=unit.knowledge_unit_id,
+            recall_intent=unit.learning_purpose, fact_type=card_type,
+        )] = occurrence + 1
         card_revision = rendered_card_revision_hash(
                 front=raw_front,
                 back=rendered_back,
@@ -472,9 +488,11 @@ def stable_card_id(
     unit_id: str = "",
     recall_intent: str = "",
     fact_type: str = "qa",
+    variant: str = "",
 ) -> str:
     if unit_id.strip() and recall_intent.strip():
-        return fact_id(unit_id, recall_intent, fact_type)
+        intent = f"{recall_intent}\0{variant}" if variant else recall_intent
+        return fact_id(unit_id, intent, fact_type)
     digest = hashlib.sha256(f"{front}\0{back}\0{source}".encode()).hexdigest()
     return digest[:16]
 

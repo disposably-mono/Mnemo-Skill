@@ -131,6 +131,17 @@ def test_default_adapter_persists_fact_id_and_revision_hash():
     assert note.fields["RevisionHash"] == "rev-atp-v1"
 
 
+def test_adapter_recomputes_stale_canonical_revision_hash():
+    note = adapt(_qa_fact(revision_hash="0" * 64))
+
+    assert note.fields["RevisionHash"] != "0" * 64
+
+
+def test_revision_hash_changes_when_visible_distractor_changes():
+    first = adapt(_qa_fact(revision_hash=None, distractors=[{"text": "A catalyst", "grade": "near"}]))
+    second = adapt(_qa_fact(revision_hash=None, distractors=[{"text": "A molecule", "grade": "near"}]))
+
+    assert first.fields["RevisionHash"] != second.fields["RevisionHash"]
 def test_mapping_placeholders_expose_revision_hash_without_requiring_extra_fields():
     fact = _qa_fact()
 

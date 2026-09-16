@@ -3,15 +3,16 @@
 ## Integrated workstreams
 
 Approved order was WS1 → WS2 → WS4 → WS5 → WS3, followed by approved follow-up
-workstreams WS6, WS7, WS8, WS9, and WS10. Each branch was isolated in
+workstreams WS6, WS7, WS8, WS9, WS10, and WS11. Each branch was isolated in
 `.worktrees/`, rebased onto `main`, and retained for audit. The final merge
 commits are `9ec75ac` (WS1), `7a74d13` (WS2), `2a8bb94` (WS4), `2f8485a`
 (WS5), `bce70e5` (WS3 integration), `fea4ee3` (WS6), `93f40ea` (WS7),
-`71b6385` (WS8), `1ecc5a7` (WS9), and `4d98891` (WS10).
+`71b6385` (WS8), `1ecc5a7` (WS9), `4d98891` (WS10), and `8483bc0` (WS11).
 Detailed reports: [WS1](WS1_REPORT.md),
 [WS2](WS2_REPORT.md), [WS3](WS3_REPORT.md), [WS4](WS4_REPORT.md), and
 [WS5](WS5_REPORT.md), [WS6](WS6_REPORT.md), [WS7](WS7_REPORT.md),
-[WS8](WS8_REPORT.md), [WS9](WS9_REPORT.md), and [WS10](WS10_REPORT.md).
+[WS8](WS8_REPORT.md), [WS9](WS9_REPORT.md), [WS10](WS10_REPORT.md), and
+[WS11](WS11_REPORT.md).
 
 Closed findings: T1, T2, T3, T4, T5, T6, T10, T11, T12, T13, T14, T15, T16, T17,
 T18, T19, T20, T21, and completed portions of T22. The integrated cloze
@@ -46,13 +47,16 @@ source/output stages were exercised with the preserved generated session.
 
 - T4/T6: CardID-based update and explicit partial-add outcomes are now handled;
   non-transactional sequential updates and transport-level batch ambiguity remain.
-- T7/T8: full annotation preservation and multiline HTML policy remain limited
-  for legacy note types. T9/T10 model migration and bundled-font upload are
-  implemented for refined imports.
+- T7: default MONO adapters now preserve supported annotations. T8 multiline
+  rendering remains intentionally newline-preserving for code and escaped HTML
+  for prose. T9/T10 model migration and bundled-font upload are implemented for
+  refined imports.
 - T14: borderless genuine PDF tables remain conservatively unstructured.
 - T20: sidecars are aligned by unit IDs but are not yet fingerprinted.
 - T22: immutable `plan_knowledge()` requires coordinated API changes.
-- T23: media-root/remote-image policy still needs a dedicated security pass.
+- T23: local media paths are constrained to their roots; remote image URLs can
+  be rejected explicitly with `--deny-remote-images`, while image-occlusion
+  media always rejects remote URLs.
 
 No branches or worktrees were deleted. The original untracked user artifacts
 remain preserved in `stash@{0}` (`pre-remediation preserve untracked review artifacts`).

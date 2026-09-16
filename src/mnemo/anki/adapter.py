@@ -235,13 +235,28 @@ def _fill(template: str, placeholders: dict[str, str]) -> str:
 def _build_qa(
     fact: Fact, media_root: str | Path | None
 ) -> tuple[dict[str, str], list[Path]]:
+    back = _field(fact.content["back"])
+    annotations = _annotation_block(fact)
+    if annotations:
+        back = f"{back}{annotations}"
     return ({
         "Front": _field(fact.content["front"]),
-        "Back": _field(fact.content["back"]),
+        "Back": back,
         "Distractors": _render_confusions(fact),
         "Source": _field(fact.source or ""),
         **_identity_fields(fact),
     }, [])
+
+
+def _annotation_block(fact: Fact) -> str:
+    """Preserve optional QA annotations on the stock Basic note model."""
+    content = fact.content
+    parts = []
+    for label, key in (("Extra", "extra"), ("Context", "context"), ("Mnemonic", "mnemonic")):
+        value = content.get(key, "")
+        if isinstance(value, str) and value.strip():
+            parts.append(f'<div class="mnemo-{key}"><b>{label}:</b> {_field(value)}</div>')
+    return "".join(parts)
 
 
 def _build_code(
@@ -351,6 +366,8 @@ def _resolve_image_path(fact: Fact, media_root: str | Path | None) -> Path:
     Anki media collection.
     """
     raw_image = fact.content["image"]
+    if re.match(r"^[a-z][a-z0-9+.-]*://", raw_image, re.IGNORECASE):
+        raise ValueError("image occlusion media must be a local file, not a remote URL")
     image_path = Path(raw_image)
     if image_path.is_absolute():
         raise ValueError(

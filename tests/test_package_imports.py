@@ -1,6 +1,6 @@
-import importlib.metadata
 import subprocess
 import sys
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -10,6 +10,12 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PACKAGE_ROOT = _REPO_ROOT / "src" / "mnemo"
+
+
+def _declared_console_scripts() -> dict[str, str]:
+    with (_REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        project = tomllib.load(handle)["project"]
+    return project["scripts"]
 
 
 def test_package_exposes_version():
@@ -22,19 +28,19 @@ def test_generate_flashcards_facade_stays_under_file_size_limit():
     assert sum(1 for _ in facade.open(encoding="utf-8")) <= 800
 
 
-def test_console_scripts_are_declared():
-    scripts = {
-        entry_point.name
-        for entry_point in importlib.metadata.entry_points(group="console_scripts")
+def test_console_scripts_are_declared_in_project_metadata():
+    assert _declared_console_scripts() == {
+        "mnemo-ingest": "mnemo.cli.ingest:main",
+        "mnemo-generate": "mnemo.cli.generate:main",
+        "mnemo-audit": "mnemo.cli.audit:main",
+        "mnemo-import": "mnemo.cli.import_cards:main",
+        "mnemo-export-note-types": "mnemo.cli.export_note_types:main",
+        "mnemo-calibrate": "mnemo.cli.calibrate:main",
+        "mnemo-import-refined-csv": "mnemo.cli.import_refined_csv:main",
+        "mnemo-ready": "mnemo.cli.ready:main",
+        "mnemo-workspace": "mnemo.cli.workspace:main",
+        "mnemo-cornell": "mnemo.cli.cornell:main",
     }
-    assert "mnemo-ingest" in scripts
-    assert "mnemo-generate" in scripts
-    assert "mnemo-audit" in scripts
-    assert "mnemo-import" in scripts
-    assert "mnemo-export-note-types" in scripts
-    assert "mnemo-ready" in scripts
-    assert "mnemo-workspace" in scripts
-    assert "mnemo-cornell" in scripts
 
 
 @pytest.mark.parametrize(

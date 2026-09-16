@@ -114,6 +114,28 @@ class AnkiConnect:
     def model_names(self) -> list[str]:
         return list(self._invoke("modelNames"))
 
+    def _ensure_model_fields(self, note_type: NoteType) -> None:
+        """Add any missing trailing fields to an existing model."""
+        actual = self._invoke("modelFieldNames", modelName=note_type.name)
+        if not isinstance(actual, list) or any(
+            not isinstance(field, str) for field in actual
+        ):
+            raise AnkiConnectError(
+                f"{note_type.name} returned an invalid field schema"
+            )
+        expected = list(note_type.fields)
+        if actual != expected[: len(actual)]:
+            raise AnkiConnectError(
+                f"{note_type.name} has incompatible fields; expected existing "
+                f"fields to preserve order, got {actual!r}"
+            )
+        for field_name in expected[len(actual) :]:
+            self._invoke(
+                "modelFieldAdd",
+                modelName=note_type.name,
+                fieldName=field_name,
+            )
+
     def ensure_note_types(self, note_types: Iterable[NoteType]) -> list[str]:
         """Create models or safely add missing fields before updating templates.
 

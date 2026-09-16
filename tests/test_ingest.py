@@ -98,6 +98,26 @@ def test_pptx_includes_tables_and_existing_speaker_notes(tmp_path):
     assert "cost belongs in the denominator" in chunks[0].text
 
 
+def test_pptx_extracts_text_inside_nested_groups(tmp_path):
+    from pptx import Presentation
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    from pptx.util import Inches
+
+    pptx = tmp_path / "grouped.pptx"
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    group = slide.shapes.add_group_shape()
+    nested = group.shapes.add_group_shape()
+    box = nested.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+    box.text_frame.text = "Nested group text survives ingestion."
+    assert group.shape_type == MSO_SHAPE_TYPE.GROUP
+    prs.save(str(pptx))
+
+    chunks = ingest(pptx)
+
+    assert "Nested group text survives ingestion." in chunks[0].text
+
+
 def _image_only_pdf(path: Path, *, image_px: int = 40, text: str | None = None) -> None:
     """Write a one-page PDF with an embedded image and optional text layer."""
     import fitz  # PyMuPDF
@@ -181,7 +201,7 @@ def test_extract_images_writes_file_and_adds_figure_marker(tmp_path):
 
     chunks = ingest(pdf, extract_images=output)
 
-    saved = output / "lecture-p1-img1.png"
+    saved = next(output.glob("lecture-p1-img1-*.png"))
     assert saved.is_file()
     assert saved.read_bytes()
     assert f"[figure: {saved} | lecture.pdf p.1]" in chunks[0].text
@@ -216,7 +236,7 @@ def test_extract_images_image_only_page_emits_chunk(tmp_path):
 
     chunks = ingest(pdf, extract_images=output)
 
-    saved = output / "scanned-p1-img1.png"
+    saved = next(output.glob("scanned-p1-img1-*.png"))
     assert saved.is_file()
     assert len(chunks) == 1
     assert "image-only page" in chunks[0].text
@@ -271,6 +291,65 @@ def test_pdf_prose_page_has_no_table_section(tmp_path):
     assert len(chunks) == 1
     assert "Photosynthesis" in chunks[0].text
     assert "Table:" not in chunks[0].text  # prose must not be mislabeled tabular
+
+
+def test_pdf_vector_only_page_is_surfaced(tmp_path):
+    import fitz  # PyMuPDF
+
+    pdf = tmp_path / "vector.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 72, 220, 140), color=(0, 0, 0), width=1)
+    doc.save(str(pdf))
+    doc.close()
+
+    chunks = ingest(pdf)
+
+    assert len(chunks) == 1
+    assert chunks[0].source == "vector.pdf p.1"
+    assert "vector-only page" in chunks[0].text
+
+
+def test_pdf_false_table_detection_is_not_re_emitted(tmp_path, monkeypatch):
+    import fitz  # PyMuPDF
+
+    class FalseTable:
+        bbox = (72, 72, 400, 140)
+
+        def extract(self):
+            return [["A paragraph", "continues here"], ["with prose", "on the next line"]]
+
+    class Finder:
+        tables = [FalseTable()]
+
+    pdf = tmp_path / "false-table.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "A paragraph continues here with prose on the next line")
+    doc.save(str(pdf))
+    doc.close()
+    monkeypatch.setattr(fitz.Page, "find_tables", lambda self: Finder())
+
+    chunks = ingest(pdf)
+
+    assert "Table:" not in chunks[0].text
+
+
+def test_extract_images_same_basename_and_page_do_not_overwrite(tmp_path):
+    first = tmp_path / "one" / "lecture.pdf"
+    second = tmp_path / "two" / "lecture.pdf"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    _image_only_pdf(first, text="First source")
+    _image_only_pdf(second, text="Second source")
+    output = tmp_path / "figures"
+
+    ingest(first, extract_images=output)
+    ingest(second, extract_images=output)
+
+    images = sorted(output.glob("lecture-p1-img1-*.png"))
+    assert len(images) == 2
+    assert images[0].read_bytes() == images[1].read_bytes()
 
 
 def test_pdf_math_like_text_layer_line_gets_provenance_label(tmp_path):

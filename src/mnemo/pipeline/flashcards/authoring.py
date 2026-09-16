@@ -115,6 +115,7 @@ def build_authoring_prompt(units: Sequence[SourceUnit]) -> str:
     source_units = [
         {
             "source_unit_id": unit.knowledge_unit_id,
+            "variant_id": unit.variant_id,
             "text": unit.text,
             "question": unit.question,
             "answer": unit.answer,
@@ -144,6 +145,7 @@ def build_authoring_prompt(units: Sequence[SourceUnit]) -> str:
                         "context": "optional prerequisite background note",
                         "card_type": "qa|cloze|reverse|typed|list",
                         "source_unit_id": "id from source_units",
+                        "variant_id": "optional stable per-unit card variant",
                         "evidence": "verbatim source span supporting the card",
                         "tags": ["optional-tags"],
                         "confidence": 0.0,
@@ -193,6 +195,10 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
     card_type = draft["card_type"].strip()
     if card_type not in CARD_TYPES:
         raise AiAuthoringError(f"AI card draft has unknown card_type: {card_type}")
+    variant_id = draft.get("variant_id", "")
+    if variant_id is None or not isinstance(variant_id, str):
+        raise AiAuthoringError("AI card variant_id must be a string when provided.")
+    variant_id = variant_id.strip()
     raw_front = draft["front"]
     raw_back = draft["back"]
     front = _field(raw_front)
@@ -239,6 +245,7 @@ def draft_to_card(draft: object, units_by_id: dict[str, SourceUnit]) -> Card:
             unit_id=unit.knowledge_unit_id,
             recall_intent=unit.learning_purpose,
             fact_type=card_type,
+            variant=variant_id,
         ),
         revision_hash=rendered_card_revision_hash(
             front=raw_front,

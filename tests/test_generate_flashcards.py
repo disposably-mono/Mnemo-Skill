@@ -24,6 +24,7 @@ from mnemo.pipeline.generate_flashcards import (
     validate_deck,
     word_count,
 )
+from mnemo.pipeline.flashcards.render import stable_card_id
 from mnemo.pipeline.flashcards.policy import CANDIDATE_CARDS_SECTION
 from mnemo.pipeline.audit_cards import build_report
 from mnemo.core.knowledge import extract_explicit_objectives
@@ -56,6 +57,23 @@ def test_build_cards_disambiguates_multiple_cards_for_one_source_unit():
 
     assert len(cards) == 2
     assert len({card.card_id for card in cards}) == 2
+
+
+def test_build_cards_uses_explicit_variant_id_for_stable_identity():
+    unit = SourceUnit(
+        text="ATP synthase uses a proton gradient.", topic="Biology",
+        source="lecture.md", question="What does ATP synthase use?",
+        answer="A proton gradient.", knowledge_unit_id="unit-atp",
+        learning_purpose="recall", variant_id="mechanism",
+    )
+
+    card = build_cards([unit])[0]
+
+    assert card.card_id == build_cards([unit])[0].card_id
+    assert card.card_id != stable_card_id(
+        card.front, card.back, card.source, unit_id="unit-atp",
+        recall_intent="recall", fact_type=card.card_type,
+    )
 
 
 def _texts(units):

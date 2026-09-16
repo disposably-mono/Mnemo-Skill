@@ -79,15 +79,17 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
         context = _field(raw_context)
         verbatim_tag = ["mnemo-verbatim-code"] if unit.verbatim_kind == "code" else []
         tags = [*unit.tags, *verbatim_tag, slugify(unit.topic), "auto"]
-        card_id = stable_card_id(
+        base_card_id = stable_card_id(
             front,
             back,
             unit.source,
             unit_id=unit.knowledge_unit_id,
             recall_intent=unit.learning_purpose,
             fact_type=card_type,
+            variant=unit.variant_id,
         )
-        occurrence = id_occurrences.get(card_id, 0)
+        card_id = base_card_id
+        occurrence = id_occurrences.get(base_card_id, 0)
         if occurrence:
             card_id = stable_card_id(
                 front,
@@ -98,10 +100,7 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
                 fact_type=card_type,
                 variant=f"variant-{occurrence + 1}",
             )
-        id_occurrences[stable_card_id(
-            front, back, unit.source, unit_id=unit.knowledge_unit_id,
-            recall_intent=unit.learning_purpose, fact_type=card_type,
-        )] = occurrence + 1
+        id_occurrences[base_card_id] = occurrence + 1
         card_revision = rendered_card_revision_hash(
                 front=raw_front,
                 back=rendered_back,

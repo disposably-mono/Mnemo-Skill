@@ -10,6 +10,8 @@ from collections import Counter, defaultdict, deque
 from typing import Sequence
 
 from mnemo.core.verbatim import has_inline_verbatim, without_inline_verbatim
+from mnemo.core.identity import fact_id
+from .revisions import rendered_card_revision_hash
 
 from .models import DEFAULT_SEED, MAX_COMPONENTS, Card, SourceUnit
 from .patterns import (
@@ -41,6 +43,7 @@ from .text import (
 
 def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
     cards: list[Card] = []
+    id_occurrences: dict[str, int] = {}
     type_counts: Counter[str] = Counter()
     for index, unit in enumerate(units):
         if unit.question and unit.answer and should_defer_authored_answer(unit.answer):
@@ -55,20 +58,70 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             else unit.group_components or enumerated_components(raw_back)
         )
         mnemonic = make_mnemonic(components)
-        front = _field(raw_front)
-        back = _field(raw_back)
+        rendered_back = raw_back
         image_url = unit.image_url
         image_alt = normalize_image_alt(unit.image_alt) if image_url else ""
         if image_url:
             card_type = "image-supported"
+            rendered_back = (
+                f'{raw_back}<br><img src="{html.escape(image_url, quote=True)}" '
+                f'alt="{html.escape(image_alt, quote=True)}">'
+            )
+        raw_extra, raw_context = _build_extra_raw(unit, raw_front, rendered_back)
+        front = _field(raw_front)
+        back = _field(raw_back)
+        if image_url:
             back = (
                 f'{back}<br><img src="{html.escape(image_url, quote=True)}" '
                 f'alt="{html.escape(image_alt, quote=True)}">'
             )
-        extra, context = build_extra(unit, front, back)
+        extra = _field(raw_extra)
+        context = _field(raw_context)
         verbatim_tag = ["mnemo-verbatim-code"] if unit.verbatim_kind == "code" else []
         tags = [*unit.tags, *verbatim_tag, slugify(unit.topic), "auto"]
-        card_id = stable_card_id(front, back, unit.source)
+        card_id = stable_card_id(
+            front,
+            back,
+            unit.source,
+            unit_id=unit.knowledge_unit_id,
+            recall_intent=unit.learning_purpose,
+            fact_type=card_type,
+        )
+        occurrence = id_occurrences.get(card_id, 0)
+        if occurrence:
+            card_id = stable_card_id(
+                front,
+                back,
+                unit.source,
+                unit_id=unit.knowledge_unit_id,
+                recall_intent=unit.learning_purpose,
+                fact_type=card_type,
+                variant=f"variant-{occurrence + 1}",
+            )
+        id_occurrences[stable_card_id(
+            front, back, unit.source, unit_id=unit.knowledge_unit_id,
+            recall_intent=unit.learning_purpose, fact_type=card_type,
+        )] = occurrence + 1
+        card_revision = rendered_card_revision_hash(
+                front=raw_front,
+                back=rendered_back,
+                extra=raw_extra,
+                context=raw_context,
+                mnemonic=mnemonic,
+                card_type=card_type,
+                tags=tags,
+                topic=unit.topic,
+                source=unit.source,
+                image_url=image_url,
+                image_alt=image_alt,
+                knowledge_unit_id=unit.knowledge_unit_id,
+                knowledge_kind=unit.knowledge_kind,
+                learning_purpose=unit.learning_purpose,
+                objective_ids=unit.objective_ids,
+                prerequisite_ids=unit.prerequisite_ids,
+                origin=unit.origin,
+                confidence=unit.confidence,
+        )
         card = Card(
             front=front,
             back=back,
@@ -82,6 +135,7 @@ def build_cards(units: Sequence[SourceUnit]) -> list[Card]:
             image_url=image_url,
             image_alt=image_alt,
             card_id=card_id,
+            revision_hash=card_revision,
             knowledge_unit_id=unit.knowledge_unit_id,
             knowledge_kind=unit.knowledge_kind,
             learning_purpose=unit.learning_purpose,
@@ -356,16 +410,19 @@ def build_extra(unit: SourceUnit, front: str = "", back: str = "") -> tuple[str,
     ``explanation_is_thin`` at validation. The context trigger uses the
     rendered ``front``/``back`` so it matches the fields the validator inspects.
     """
+    raw_extra, raw_context = _build_extra_raw(unit, front, back)
+    return _field(raw_extra), _field(raw_context)
+
+
+def _build_extra_raw(unit: SourceUnit, front: str = "", back: str = "") -> tuple[str, str]:
     explicit_extra = re.sub(
         r"^Explanation:\s*", "", unit.extra.strip(), flags=re.IGNORECASE
     )
-    explanation = _field(explicit_extra or declarative_statement(unit))
-    topic = _field(unit.topic)
-    source = _field(unit.source)
+    explanation = explicit_extra or declarative_statement(unit)
     if requires_context(front or unit.text, back or unit.question):
-        context = f"{topic} background is assumed; review {source} if unfamiliar."
+        context = f"{unit.topic} background is assumed; review {unit.source} if unfamiliar."
     else:
-        context = f"Topic: {topic}."
+        context = f"Topic: {unit.topic}."
     return explanation, context
 
 
@@ -423,7 +480,19 @@ def normalize_image_alt(alt: str) -> str:
     return f"{alt}; this visual cue anchors the relationship tested by the card."
 
 
-def stable_card_id(front: str, back: str, source: str) -> str:
+def stable_card_id(
+    front: str,
+    back: str,
+    source: str,
+    *,
+    unit_id: str = "",
+    recall_intent: str = "",
+    fact_type: str = "qa",
+    variant: str = "",
+) -> str:
+    if unit_id.strip() and recall_intent.strip():
+        intent = f"{recall_intent}\0{variant}" if variant else recall_intent
+        return fact_id(unit_id, intent, fact_type)
     digest = hashlib.sha256(f"{front}\0{back}\0{source}".encode()).hexdigest()
     return digest[:16]
 

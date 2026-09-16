@@ -27,6 +27,35 @@ from mnemo.pipeline.generate_flashcards import (
 from mnemo.pipeline.flashcards.policy import CANDIDATE_CARDS_SECTION
 from mnemo.pipeline.audit_cards import build_report
 from mnemo.core.knowledge import extract_explicit_objectives
+from mnemo.pipeline.flashcards.models import SourceUnit
+
+
+def test_build_cards_disambiguates_multiple_cards_for_one_source_unit():
+    units = [
+        SourceUnit(
+            text="ATP synthase uses a proton gradient.",
+            topic="Biology",
+            source="lecture.md",
+            question="What does ATP synthase use?",
+            answer="A proton gradient.",
+            knowledge_unit_id="unit-atp",
+            learning_purpose="recall",
+        ),
+        SourceUnit(
+            text="ATP synthase uses a proton gradient.",
+            topic="Biology",
+            source="lecture.md",
+            question="What uses a proton gradient?",
+            answer="ATP synthase.",
+            knowledge_unit_id="unit-atp",
+            learning_purpose="recall",
+        ),
+    ]
+
+    cards = build_cards(units)
+
+    assert len(cards) == 2
+    assert len({card.card_id for card in cards}) == 2
 
 
 def _texts(units):

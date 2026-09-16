@@ -4,6 +4,7 @@ import json
 import pytest
 
 from mnemo.core.card_schema import CardValidationError
+from mnemo.pipeline.generate_flashcards import SourceUnit, build_cards
 from mnemo.pipeline.import_refined_csv import (
     BASIC_MODEL,
     CLOZE_MODEL,
@@ -244,6 +245,60 @@ def test_row_to_fact_carries_semantic_metadata():
     assert fact.prerequisite_ids == ["unit-profit"]
     assert fact.confidence == 0.9
     assert "finance" in fact.tags and "mnemo-kind-formula" in fact.tags
+
+
+def test_row_to_fact_preserves_generated_revision_hash_when_csv_field_is_blank():
+    card = build_cards(
+        [
+            SourceUnit(
+                text="ATP synthase uses a proton gradient.",
+                topic="Bio & Chem",
+                source="lecture<1>.md",
+                question="What does ATP synthase use?",
+                answer="A proton gradient.",
+                extra="The source states ATP synthase uses a proton gradient.",
+                tags=["bio"],
+                knowledge_unit_id="unit-atp",
+                knowledge_kind="fact",
+                learning_purpose="recall",
+                origin="source",
+                confidence=1.0,
+            )
+        ]
+    )[0]
+    row = {**card.to_row(), "RevisionHash": ""}
+
+    fact = row_to_fact(row, "Deck")
+
+    assert fact.revision_hash == card.revision_hash
+
+
+def test_row_to_fact_preserves_generated_revision_hash_for_image_supported_cards():
+    card = build_cards(
+        [
+            SourceUnit(
+                text="ATP synthase uses a proton gradient.",
+                topic="Bio & Chem",
+                source="lecture<1>.md",
+                question="What does ATP synthase use?",
+                answer="A proton gradient.",
+                extra="The source states ATP synthase uses a proton gradient.",
+                tags=["bio"],
+                image_url="https://example.com/img?a=1&b=2",
+                image_alt="ATP < transporter & channel",
+                knowledge_unit_id="unit-atp",
+                knowledge_kind="fact",
+                learning_purpose="recall",
+                origin="source",
+                confidence=1.0,
+            )
+        ]
+    )[0]
+    row = {**card.to_row(), "RevisionHash": ""}
+
+    fact = row_to_fact(row, "Deck")
+
+    assert fact.revision_hash == card.revision_hash
 
 
 def test_row_to_fact_rejects_malformed_metadata():

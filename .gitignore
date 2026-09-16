@@ -22,6 +22,8 @@ htmlcov/
 .mypy_cache/
 /skill/
 .worktrees/
+graphify-out/
+docs/
 
 # Project runtime output
 cards/*

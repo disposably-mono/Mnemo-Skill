@@ -364,7 +364,7 @@ def plan_knowledge(
         unit.knowledge_kind = kind
         unit.learning_purpose = purpose
         unit.objective_ids = list(objective_ids)
-        unit.prerequisite_ids = prerequisites
+        unit.prerequisite_ids = list(prerequisites)
         knowledge = KnowledgeUnit(
             id=unit_id,
             text=unit.text,

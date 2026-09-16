@@ -4,7 +4,7 @@ import json
 from mnemo.pipeline.audit_cards import build_report, main, print_report
 
 
-CARD_FIELDS = ("Front", "Back", "Extra", "Mnemonic", "CardType", "Tags")
+CARD_FIELDS = ("Front", "Back", "Extra", "Mnemonic", "CardType", "Tags", "Source")
 APPROVAL_FIELDS = ("card_id", "decision", "edited_fields", "reason")
 
 
@@ -24,6 +24,7 @@ def card_row(back="one"):
         "Mnemonic": "",
         "CardType": "qa",
         "Tags": "test",
+        "Source": "notes.md:line-1",
     }
 
 
@@ -192,3 +193,11 @@ def test_coverage_sidecar_auto_discovered_next_to_deck_via_main(tmp_path, capsys
 
     assert report["coverage"]["summary"]["covered_objectives"] == 1
     assert report["coverage"]["objectives"][0]["status"] == "covered"
+
+
+def test_missing_source_is_not_replaced_by_csv_row_location(tmp_path):
+    deck = write_csv(tmp_path / "deck.csv", CARD_FIELDS, [{**card_row(), "Source": ""}])
+
+    report = build_report(deck)
+
+    assert any(item["code"] == "MISSING_SOURCE" for item in report["violations"])

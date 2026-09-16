@@ -147,7 +147,8 @@ def step_uses_day(step: str) -> bool:
     if not match:
         return True
     amount, unit = int(match.group(1)), match.group(2)
-    return unit == "d" or (unit == "h" and amount >= 24)
+    minutes = amount * {"m": 1, "h": 60, "d": 24 * 60}[unit]
+    return minutes >= 24 * 60
 
 
 def has_avoidable_topic_runs(cards: Sequence[Card]) -> bool:

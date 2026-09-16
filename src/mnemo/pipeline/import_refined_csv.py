@@ -152,6 +152,12 @@ class RefinedImportReport:
     media: tuple[str, ...]
     preset: str
     synced: bool
+    # Updates are performed one at a time by AnkiConnect.  Keep failures in
+    # the report rather than aborting after the first one: earlier updates may
+    # already have committed and retrying the whole CSV would obscure that
+    # partial outcome.
+    failed_card_ids: tuple[str, ...] = ()
+    failure_messages: tuple[str, ...] = ()
 
 
 # How a refined Fact renders into the refined note types: a plain adapter
@@ -366,6 +372,11 @@ def existing_card_notes(client: AnkiConnect, deck: str) -> dict[str, int]:
             value = field.get("value", "") if isinstance(field, dict) else ""
             note_id = info.get("noteId")
             if value and isinstance(note_id, int) and not isinstance(note_id, bool):
+                if value in ids and ids[value] != note_id:
+                    raise AnkiConnectError(
+                        f"Anki contains duplicate notes for CardID {value!r}; "
+                        "resolve the duplicate before importing"
+                    )
                 ids[value] = note_id
     return ids
 
@@ -443,14 +454,21 @@ def import_refined_csv(
         for note in notes
         if note.fields["CardID"] in known_notes
     ]
+    failed_card_ids: list[str] = []
+    failure_messages: list[str] = []
+    updated = 0
     for note, note_id in existing:
         try:
             client.update_note(note, note_id)
         except AnkiConnectError as exc:
             card_id = note.fields.get("CardID", "")
-            raise AnkiConnectError(
-                f"could not update existing CardID {card_id!r} (note {note_id}): {exc}"
-            ) from exc
+            failed_card_ids.append(card_id)
+            failure_messages.append(
+                f"could not update existing CardID {card_id!r} "
+                f"(note {note_id}): {exc}"
+            )
+        else:
+            updated += 1
     pending = [note for note in notes if note.fields["CardID"] not in known_notes]
     result = client.add_notes(pending) if pending else None
     added = len(result.added) if result else 0
@@ -459,8 +477,8 @@ def import_refined_csv(
     if sync:
         client.sync()
     return RefinedImportReport(
-        deck, added, len(existing), skipped, skipped_card_ids, stored,
-        PRESET_NAME, sync,
+        deck, added, updated, skipped, skipped_card_ids, stored,
+        PRESET_NAME, sync, tuple(failed_card_ids), tuple(failure_messages),
     ), preset_id
 
 
@@ -495,7 +513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     print(
         f"{report.deck}: {report.added} added, {report.updated} updated, "
-        f"{report.skipped} skipped; "
+        f"{report.skipped} skipped, {len(report.failed_card_ids)} failed; "
         f"preset={report.preset}, media={len(report.media)}, synced={report.synced}."
     )
     if report.skipped_card_ids:
@@ -503,6 +521,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Skipped CardID(s): " + ", ".join(report.skipped_card_ids),
             file=sys.stderr,
         )
+    if report.failure_messages:
+        print("Update failure(s):", file=sys.stderr)
+        for message in report.failure_messages:
+            print(f"- {message}", file=sys.stderr)
+        return 1
     return 0
 
 

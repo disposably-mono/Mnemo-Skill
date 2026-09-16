@@ -177,6 +177,16 @@ def test_remote_image_url_rejects_non_http_scheme(tmp_path):
         load_notes(path, "Deck")
 
 
+def test_remote_image_url_can_be_disabled_by_import_policy(tmp_path):
+    path = tmp_path / "cards.csv"
+    _write(path, [{
+        "Front": "Q", "Back": "A", "CardType": "qa", "CardID": "remote-policy",
+        "ImageURL": "https://example.com/image.png",
+    }])
+    with pytest.raises(ValueError, match="disabled by import policy"):
+        load_notes(path, "Deck", allow_remote_images=False)
+
+
 def test_image_attributes_are_escaped_for_refined_cards(tmp_path):
     path = tmp_path / "cards.csv"
     _write(path, [{

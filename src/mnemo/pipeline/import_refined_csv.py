@@ -275,7 +275,7 @@ def _augmented_tags(row: dict[str, str], card_id: str) -> list[str]:
 
 
 def _collect_local_image(
-    row: dict[str, str], base_dir: Path, media: dict[Path, None]
+    row: dict[str, str], base_dir: Path, media: dict[Path, None], *, allow_remote: bool = True
 ) -> str:
     """Register a CSV-local image for upload and return the field value."""
     image_url = (row.get("ImageURL") or "").strip()
@@ -283,6 +283,8 @@ def _collect_local_image(
     if image_url and (parsed.scheme or parsed.netloc):
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("remote ImageURL values must use http or https")
+        if not allow_remote:
+            raise ValueError("remote ImageURL values are disabled by import policy")
         return _field(image_url)
     if image_url:
         if Path(image_url).is_absolute():
@@ -331,7 +333,9 @@ def _apply_passthrough(note: AnkiNote, row: dict[str, str], image_url: str) -> A
     )
 
 
-def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
+def load_notes(
+    csv_path: Path, deck: str, *, allow_remote_images: bool = True
+) -> tuple[list[AnkiNote], list[Path]]:
     notes: list[AnkiNote] = []
     media: dict[Path, None] = {}
     with csv_path.open(encoding="utf-8-sig", newline="") as handle:
@@ -344,7 +348,9 @@ def load_notes(csv_path: Path, deck: str) -> tuple[list[AnkiNote], list[Path]]:
                 fact = row_to_fact(row, deck)
             except CardValidationError as exc:
                 raise ValueError(f"line {line_number}: {exc}") from exc
-            image_url = _collect_local_image(row, csv_path.parent, media)
+            image_url = _collect_local_image(
+                row, csv_path.parent, media, allow_remote=allow_remote_images
+            )
             note = _apply_passthrough(
                 adapt(fact, mappings=REFINED_MAPPINGS), row, image_url
             )
@@ -424,13 +430,16 @@ def import_refined_csv(
     client: AnkiConnect | None = None,
     sync: bool = False,
     preset_id: int | None = None,
+    allow_remote_images: bool = True,
 ) -> tuple[RefinedImportReport, int]:
     csv_path = Path(csv_path)
     client = client or AnkiConnect()
     if not client.is_available():
         raise AnkiConnectError("AnkiConnect is unavailable; open Anki and retry")
     # Parse and validate all local input before touching Anki state.
-    notes, media_paths = load_notes(csv_path, deck)
+    notes, media_paths = load_notes(
+        csv_path, deck, allow_remote_images=allow_remote_images
+    )
     _reject_duplicate_card_ids(notes)
     validator = getattr(client, "validate_note_type_fields", None)
     if validator is not None:
@@ -496,6 +505,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deck", required=True)
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--sync", action="store_true")
+    parser.add_argument(
+        "--deny-remote-images", action="store_true",
+        help="Reject http(s) ImageURL values; allow only local media files.",
+    )
     return parser
 
 
@@ -507,6 +520,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.deck,
             client=AnkiConnect(args.url),
             sync=args.sync,
+            allow_remote_images=not args.deny_remote_images,
         )
     except (AnkiConnectError, FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

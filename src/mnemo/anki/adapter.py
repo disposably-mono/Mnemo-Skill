@@ -447,7 +447,9 @@ def _render_confusions(fact: Fact) -> str:
 
 
 def _field(value: str) -> str:
-    return html.escape(value, quote=True)
+    """Escape prose for Anki HTML and preserve line breaks explicitly."""
+    escaped = html.escape(value, quote=True)
+    return re.sub(r"\r\n|\r|\n", "<br>", escaped)
 
 
 def _cloze_text(value: str) -> str:

@@ -41,6 +41,12 @@ def test_qa_text_fields_escape_untrusted_html():
     assert note.fields["Source"] == "lecture &lt;1&gt;"
 
 
+def test_prose_line_breaks_render_as_anki_html_breaks():
+    note = adapt(_qa(content={"front": "Line one\nLine two", "back": "A\r\nB"}))
+    assert note.fields["Front"] == "Line one<br>Line two"
+    assert note.fields["Back"] == "A<br>B"
+
+
 def test_qa_without_source_yields_empty_source_field():
     note = adapt(_qa(source=None))
     assert note.fields["Source"] == ""

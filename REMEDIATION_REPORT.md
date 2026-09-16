@@ -48,8 +48,8 @@ source/output stages were exercised with the preserved generated session.
 - T4/T6: CardID-based update and explicit partial-add outcomes are now handled;
   non-transactional sequential updates and transport-level batch ambiguity remain.
 - T7: default MONO adapters now preserve supported annotations. T8 multiline
-  rendering remains intentionally newline-preserving for code and escaped HTML
-  for prose. T9/T10 model migration and bundled-font upload are implemented for
+  rendering converts prose line endings to `<br>` while code retains literal
+  newlines. T9/T10 model migration and bundled-font upload are implemented for
   refined imports.
 - T14: borderless genuine PDF tables remain conservatively unstructured.
 - T20: sidecars are aligned by unit IDs but are not yet fingerprinted.

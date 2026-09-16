@@ -23,7 +23,7 @@ from .authoring import (
     FileAiProvider,
     JsonAiAuthor,
 )
-from .io import analyze_retention, write_csv, write_json
+from .io import analyze_retention, sha256_file, write_csv, write_json
 from .models import GenerationConfig
 from .parse import parse_content, plan_knowledge
 from .policy import (
@@ -167,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     violations = validate_deck(cards, config)
 
     write_csv(cards, args.output)
+    csv_sha256 = sha256_file(args.output)
     settings_path = args.output.with_suffix(".settings.json")
     violations_path = args.output.with_suffix(".violations.json")
     retention_path = args.output.with_suffix(".retention.json")
@@ -188,13 +189,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_json(
         {
             "version": 1,
+            "fingerprints": {"csv_sha256": csv_sha256},
             "source": args.input.name,
             "objectives": [objective.to_dict() for objective in objectives],
             "knowledge_units": [unit.to_dict() for unit in knowledge_units],
         },
         manifest_path,
     )
-    coverage_report = build_coverage_report(objectives, knowledge_units)
+    coverage_report = {
+        **build_coverage_report(objectives, knowledge_units),
+        "fingerprints": {"csv_sha256": csv_sha256},
+    }
     write_json(coverage_report, coverage_path)
 
     errors = sum(violation.level == "error" for violation in violations)

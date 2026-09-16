@@ -157,3 +157,36 @@ def test_ready_gate_requires_manifest_sidecar(tmp_path):
     output.with_suffix(".manifest.json").unlink()
 
     assert ready_main([str(output), "--deck", "Mnemo::Science 11"]) == 2
+
+
+def test_ready_gate_rejects_stale_manifest_after_csv_changes(tmp_path):
+    from mnemo.pipeline.ready import main as ready_main
+
+    source = tmp_path / "notes.md"
+    output = tmp_path / "notes.csv"
+    source.write_text(
+        "## Candidate Cards\n\nQ: What is alpha?\nA: One.\nExtra: Alpha is the first item.\n",
+        encoding="utf-8",
+    )
+    assert generate_main([str(source), "--output", str(output)]) == 0
+    output.write_text(output.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    assert ready_main([str(output), "--deck", "Mnemo::Science 11"]) == 2
+
+
+def test_ready_gate_rejects_stale_coverage_sidecar(tmp_path):
+    from mnemo.pipeline.ready import main as ready_main
+
+    source = tmp_path / "notes.md"
+    output = tmp_path / "notes.csv"
+    source.write_text(
+        "## Candidate Cards\n\nQ: What is alpha?\nA: One.\nExtra: Alpha is the first item.\n",
+        encoding="utf-8",
+    )
+    assert generate_main([str(source), "--output", str(output)]) == 0
+    coverage = output.with_suffix(".coverage.json")
+    data = json.loads(coverage.read_text(encoding="utf-8"))
+    data["fingerprints"]["csv_sha256"] = "0" * 64
+    coverage.write_text(json.dumps(data), encoding="utf-8")
+
+    assert ready_main([str(output), "--deck", "Mnemo::Science 11"]) == 2

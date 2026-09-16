@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Sequence
 
 from .models import CSV_FIELDS, Card
+
+
+def sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of a file without loading it all at once."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 def write_csv(cards: Sequence[Card], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

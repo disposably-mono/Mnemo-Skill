@@ -151,7 +151,11 @@ def _extract_pdf_tables(page) -> list[str]:
             continue
         bbox = getattr(table, "bbox", None)
         if bbox is None or not _has_table_grid(drawings, bbox):
-            _logger.debug("discarding table candidate without a visible grid")
+            _logger.debug("retaining unstructured table candidate without a visible grid")
+            blocks.append(
+                "[table candidate: inferred columns without visible grid; "
+                "human review required]"
+            )
             continue
         rendered = _format_pdf_table(rows)
         if rendered:

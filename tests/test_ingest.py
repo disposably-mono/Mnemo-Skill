@@ -310,7 +310,7 @@ def test_pdf_vector_only_page_is_surfaced(tmp_path):
     assert "vector-only page" in chunks[0].text
 
 
-def test_pdf_false_table_detection_is_not_re_emitted(tmp_path, monkeypatch):
+def test_pdf_false_table_detection_is_marked_for_review(tmp_path, monkeypatch):
     import fitz  # PyMuPDF
 
     class FalseTable:
@@ -333,6 +333,7 @@ def test_pdf_false_table_detection_is_not_re_emitted(tmp_path, monkeypatch):
     chunks = ingest(pdf)
 
     assert "Table:" not in chunks[0].text
+    assert "table candidate" in chunks[0].text
 
 
 def test_extract_images_same_basename_and_page_do_not_overwrite(tmp_path):

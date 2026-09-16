@@ -288,6 +288,7 @@ def test_ensure_note_types_creates_missing_models_with_cloze_flag():
     updated_styling = []
     _register({
         "modelNames": ["MONO Basic"],  # Other bundled models are missing.
+        "modelFieldNames": list(MONO_NOTE_TYPES["MONO Basic"].fields),
         "createModel": lambda p: created.append(p["params"]) or {"id": 1},
         "updateModelTemplates": lambda p: updated_templates.append(p["params"]),
         "updateModelStyling": lambda p: updated_styling.append(p["params"]),
@@ -302,6 +303,42 @@ def test_ensure_note_types_creates_missing_models_with_cloze_flag():
     assert "Card 1" in updated_templates[0]["model"]["templates"]
     assert updated_styling[0]["model"]["name"] == "MONO Basic"
     assert "_outfit-variable.ttf" in updated_styling[0]["model"]["css"]
+
+
+@responses.activate
+def test_ensure_note_types_adds_missing_trailing_fields_before_templates():
+    from mnemo.anki.note_types import MONO_NOTE_TYPES
+
+    basic = MONO_NOTE_TYPES["MONO Basic"]
+    calls = []
+    _register({
+        "modelNames": [basic.name],
+        "modelFieldNames": list(basic.fields[:2]),
+        "modelFieldAdd": lambda p: calls.append(p["params"]) or True,
+        "updateModelTemplates": lambda p: calls.append(p["params"]) or True,
+        "updateModelStyling": lambda p: True,
+    })
+
+    AnkiConnect(URL).ensure_note_types([basic])
+
+    assert [call["fieldName"] for call in calls[: len(basic.fields) - 2]] == list(
+        basic.fields[2:]
+    )
+    assert calls[-1]["model"]["name"] == basic.name
+
+
+@responses.activate
+def test_ensure_note_types_rejects_incompatible_existing_field_order():
+    from mnemo.anki.note_types import MONO_NOTE_TYPES
+
+    basic = MONO_NOTE_TYPES["MONO Basic"]
+    _register({
+        "modelNames": [basic.name],
+        "modelFieldNames": ["Back", "Front", *basic.fields[2:]],
+    })
+
+    with pytest.raises(AnkiConnectError, match="incompatible fields"):
+        AnkiConnect(URL).ensure_note_types([basic])
 
 
 @responses.activate

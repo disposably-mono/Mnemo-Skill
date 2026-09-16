@@ -82,9 +82,9 @@ class AnkiConnect:
                 continue
             actual = self._invoke("modelFieldNames", modelName=note_type.name)
             expected = list(note_type.fields)
-            if actual != expected:
+            if not isinstance(actual, list) or actual != expected[:len(actual)]:
                 raise AnkiConnectError(
-                    f"{note_type.name} fields differ from the expected schema"
+                    f"{note_type.name} fields are incompatible with the expected schema"
                 )
 
     def is_available(self) -> bool:
@@ -115,11 +115,17 @@ class AnkiConnect:
         return list(self._invoke("modelNames"))
 
     def ensure_note_types(self, note_types: Iterable[NoteType]) -> list[str]:
-        """Create missing MONO models and refresh existing templates/styling."""
+        """Create models or safely add missing fields before updating templates.
+
+        Anki appends fields through ``modelFieldAdd``. Existing fields must
+        therefore remain in the same order; a reordered or otherwise
+        incompatible schema is rejected instead of silently changing notes.
+        """
         existing = set(self.model_names())
         created: list[str] = []
         for nt in note_types:
             if nt.name in existing:
+                self._ensure_model_fields(nt)
                 self._invoke(
                     "updateModelTemplates",
                     model={
@@ -151,6 +157,27 @@ class AnkiConnect:
             )
             created.append(nt.name)
         return created
+
+    def _ensure_model_fields(self, note_type: NoteType) -> None:
+        actual = self._invoke("modelFieldNames", modelName=note_type.name)
+        if not isinstance(actual, list) or any(
+            not isinstance(field, str) for field in actual
+        ):
+            raise AnkiConnectError(
+                f"{note_type.name} returned an invalid field schema"
+            )
+        expected = list(note_type.fields)
+        if actual != expected[: len(actual)]:
+            raise AnkiConnectError(
+                f"{note_type.name} has incompatible fields; expected existing "
+                f"fields to preserve order, got {actual!r}"
+            )
+        for field_name in expected[len(actual):]:
+            self._invoke(
+                "modelFieldAdd",
+                modelName=note_type.name,
+                fieldName=field_name,
+            )
 
     def ensure_models_exist(self, names: Iterable[str]) -> None:
         """Fail clearly when a configured stock/community model is absent."""

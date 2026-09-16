@@ -104,19 +104,48 @@ def test_add_notes_counts_added_and_skipped():
 
     notes = [
         AnkiNote(model="MONO Basic", deck="Geo",
-                 fields={"Front": "Q", "Back": "A"}, tags=["geo"]),
+                 fields={"Front": "Q", "Back": "A", "CardID": "new-1"}, tags=["geo"]),
         AnkiNote(model="MONO Basic", deck="Geo",
-                 fields={"Front": "Q", "Back": "A"}, tags=["geo"]),
+                 fields={"Front": "Q", "Back": "A", "CardID": "dupe-1"}, tags=["geo"]),
     ]
     result = AnkiConnect(URL).add_notes(notes)
     assert result.added == [1001]
     assert result.skipped == 1
+    assert result.skipped_card_ids == ("dupe-1",)
     # Payload shape sanity:
     first = sent["notes"][0]
     assert first["deckName"] == "Geo"
     assert first["modelName"] == "MONO Basic"
     assert first["fields"]["Front"] == "Q"
     assert first["options"]["allowDuplicate"] is False
+
+
+@responses.activate
+def test_update_note_sends_stable_card_payload():
+    sent = {}
+
+    def update(payload):
+        sent.update(payload["params"])
+        return None
+
+    _register({"updateNote": update})
+    note = AnkiNote(
+        model="MONO Basic", deck="Geo",
+        fields={"Front": "Updated", "Back": "Answer", "CardID": "stable-1"},
+        tags=["refined"],
+    )
+
+    AnkiConnect(URL).update_note(note, 42)
+
+    assert sent == {
+        "note": {
+            "id": 42,
+            "modelName": "MONO Basic",
+            "deckName": "Geo",
+            "fields": note.fields,
+            "tags": ["refined"],
+        }
+    }
 
 
 @responses.activate

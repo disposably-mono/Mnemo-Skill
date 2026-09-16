@@ -315,6 +315,7 @@ class FakeClient:
     def __init__(self):
         self.synced = False
         self.notes = []
+        self.updated = []
         self.config = {
             "id": 7,
             "name": "Existing",
@@ -342,6 +343,9 @@ class FakeClient:
         self.notes.extend(notes)
         return FakeResult()
 
+    def update_note(self, note, note_id):
+        self.updated.append((note_id, note))
+
     def sync(self):
         self.synced = True
 
@@ -355,8 +359,8 @@ class FakeClient:
             return models[params["modelName"]]
         if action == "notesInfo":
             return [
-                {"fields": {"CardID": {"value": "known"}}},
-                {"fields": {"CardID": "ignored"}},
+                {"noteId": 1, "fields": {"CardID": {"value": "known"}}},
+                {"noteId": 2, "fields": {"CardID": "ignored"}},
             ]
         if action == "getDeckConfig":
             return self.config
@@ -388,3 +392,22 @@ def test_existing_ids_preset_and_full_refined_import(tmp_path):
     assert report.added == 1 and report.skipped == 0
     assert report.synced is True and client.synced is True
     assert client.notes[0].fields["CardID"] == "new"
+
+
+def test_refined_import_updates_existing_card_ids_and_adds_new_cards(tmp_path):
+    client = FakeClient()
+    path = tmp_path / "cards.csv"
+    _write(path, [
+        {"Front": "Updated question", "Back": "Updated answer",
+         "CardType": "qa", "CardID": "known"},
+        {"Front": "New question", "Back": "New answer",
+         "CardType": "qa", "CardID": "new"},
+    ])
+
+    report, _ = import_refined_csv(path, "Existing", client=client)
+
+    assert report.updated == 1
+    assert report.added == 1
+    assert report.skipped == 0
+    assert client.updated[0][0] == 1
+    assert client.updated[0][1].fields["CardID"] == "known"

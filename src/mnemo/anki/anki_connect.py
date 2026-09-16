@@ -42,6 +42,7 @@ class AddResult:
 
     added: list[int]
     skipped: int  # notes AnkiConnect refused (duplicates / failures)
+    skipped_card_ids: tuple[str, ...] = ()
 
 
 class AnkiConnect:
@@ -231,9 +232,37 @@ class AnkiConnect:
         added_notes = [
             (note, nid) for note, nid in zip(notes, result) if nid is not None
         ]
-        skipped = sum(1 for nid in result if nid is None)
+        skipped_notes = [note for note, nid in zip(notes, result) if nid is None]
+        skipped = len(skipped_notes)
         self._pin_decks(added_notes)
-        return AddResult(added=[nid for _, nid in added_notes], skipped=skipped)
+        return AddResult(
+            added=[nid for _, nid in added_notes],
+            skipped=skipped,
+            skipped_card_ids=tuple(
+                note.fields.get("CardID", "") for note in skipped_notes
+            ),
+        )
+
+    def update_note(self, note: AnkiNote, note_id: int) -> None:
+        """Replace the fields and tags for one existing note.
+
+        The caller supplies the note id discovered from the stable CardID. This
+        deliberately uses ``updateNote`` instead of adding a duplicate note.
+        AnkiConnect returns null on success, so transport/API errors are raised
+        by ``_invoke`` with the action context.
+        """
+        if isinstance(note_id, bool) or not isinstance(note_id, int) or note_id <= 0:
+            raise AnkiConnectError(f"invalid existing note id: {note_id!r}")
+        self._invoke(
+            "updateNote",
+            note={
+                "id": note_id,
+                "modelName": note.model,
+                "deckName": note.deck,
+                "fields": note.fields,
+                "tags": note.tags,
+            },
+        )
 
     def change_deck(self, card_ids: Iterable[int], deck: str) -> None:
         """Move the given cards into ``deck`` (which must already exist)."""

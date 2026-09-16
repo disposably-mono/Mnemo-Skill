@@ -583,6 +583,54 @@ def test_cornell_command_ai_response_rejects_weak_substring_answer(tmp_path):
     assert not note.exists()
 
 
+def test_cornell_command_ai_response_accepts_legitimate_short_answer(tmp_path):
+    from mnemo.pipeline.cornell import main as cornell_main
+
+    source = tmp_path / "source.md"
+    note = tmp_path / "module.cornell.md"
+    source_text = "ATP carries energy.\n"
+    units = parse_content(source_text, source.name)
+    plan_knowledge(units, source_text, source.name)
+    source.write_text(source_text, encoding="utf-8")
+    response = tmp_path / "cornell.json"
+    response.write_text(json.dumps({
+        "notes": [{"text": source_text.strip(), "evidence": source_text.strip(),
+                   "source_unit_id": units[0].knowledge_unit_id}],
+        "summary": {"text": source_text.strip(), "evidence": source_text.strip(),
+                    "source_unit_id": units[0].knowledge_unit_id},
+        "follow_up_gaps": [],
+        "candidate_cards": [{"source_unit_id": units[0].knowledge_unit_id,
+            "question": "What carries energy?", "answer": "ATP",
+            "extra": "Explanation: The source identifies ATP.",
+            "evidence": source_text.strip()}],
+    }), encoding="utf-8")
+
+    assert cornell_main([str(source), "--output", str(note), "--author", "ai",
+                         "--ai-response-file", str(response)]) == 0
+    assert note.exists()
+
+
+def test_cornell_allows_explicitly_reviewed_paraphrase():
+    from mnemo.pipeline.cornell import ai_candidate_card
+
+    source_text = "Water is H2O."
+    unit = parse_content(source_text, "source.md")[0]
+    plan_knowledge([unit], source_text, "source.md")
+    candidate = ai_candidate_card(
+        {
+            "source_unit_id": unit.knowledge_unit_id,
+            "question": "What formula does water have?",
+            "answer": "Its molecular formula is H2O.",
+            "extra": "Explanation: The source gives the formula.",
+            "evidence": "Water is H2O.",
+            "reviewed_paraphrase": True,
+        },
+        {unit.knowledge_unit_id: unit},
+        [],
+    )
+    assert candidate[1] == "Its molecular formula is H2O"
+
+
 def test_cornell_command_ai_response_rejects_unsupported_summary(tmp_path):
     from mnemo.pipeline.cornell import main as cornell_main
 

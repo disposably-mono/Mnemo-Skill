@@ -144,7 +144,9 @@ REFINED_TYPED = NoteType(
 class RefinedImportReport:
     deck: str
     added: int
+    updated: int
     skipped: int
+    skipped_card_ids: tuple[str, ...]
     media: tuple[str, ...]
     preset: str
     synced: bool
@@ -348,18 +350,24 @@ def _reject_duplicate_card_ids(notes: list[AnkiNote]) -> None:
         seen.add(card_id)
 
 
-def existing_card_ids(client: AnkiConnect, deck: str) -> set[str]:
+def existing_card_notes(client: AnkiConnect, deck: str) -> dict[str, int]:
     note_ids = client.find_notes(f'deck:"{deck}"')
     if not note_ids:
-        return set()
-    ids: set[str] = set()
+        return {}
+    ids: dict[str, int] = {}
     for start in range(0, len(note_ids), 500):
         for info in client._invoke("notesInfo", notes=note_ids[start:start + 500]):
             field = info.get("fields", {}).get("CardID", {})
             value = field.get("value", "") if isinstance(field, dict) else ""
-            if value:
-                ids.add(value)
+            note_id = info.get("noteId")
+            if value and isinstance(note_id, int) and not isinstance(note_id, bool):
+                ids[value] = note_id
     return ids
+
+
+def existing_card_ids(client: AnkiConnect, deck: str) -> set[str]:
+    """Return stable IDs for compatibility with callers needing only presence."""
+    return set(existing_card_notes(client, deck))
 
 
 def apply_legacy_preset(client: AnkiConnect, deck: str, preset_id: int | None = None) -> int:
@@ -423,14 +431,31 @@ def import_refined_csv(
             raise AnkiConnectError(f"{model} fields differ from the refined schema")
     preset_id = apply_legacy_preset(client, deck, preset_id)
     stored = tuple(client.store_media_files(media_paths))
-    known_ids = existing_card_ids(client, deck)
-    pending = [note for note in notes if note.fields["CardID"] not in known_ids]
+    known_notes = existing_card_notes(client, deck)
+    existing = [
+        (note, known_notes[note.fields["CardID"]])
+        for note in notes
+        if note.fields["CardID"] in known_notes
+    ]
+    for note, note_id in existing:
+        try:
+            client.update_note(note, note_id)
+        except AnkiConnectError as exc:
+            card_id = note.fields.get("CardID", "")
+            raise AnkiConnectError(
+                f"could not update existing CardID {card_id!r} (note {note_id}): {exc}"
+            ) from exc
+    pending = [note for note in notes if note.fields["CardID"] not in known_notes]
     result = client.add_notes(pending) if pending else None
     added = len(result.added) if result else 0
-    skipped = len(notes) - len(pending) + (result.skipped if result else 0)
+    skipped_card_ids = getattr(result, "skipped_card_ids", ()) if result else ()
+    skipped = result.skipped if result else 0
     if sync:
         client.sync()
-    return RefinedImportReport(deck, added, skipped, stored, PRESET_NAME, sync), preset_id
+    return RefinedImportReport(
+        deck, added, len(existing), skipped, skipped_card_ids, stored,
+        PRESET_NAME, sync,
+    ), preset_id
 
 
 def _field(value: str) -> str:
@@ -463,9 +488,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     print(
-        f"{report.deck}: {report.added} added, {report.skipped} skipped; "
+        f"{report.deck}: {report.added} added, {report.updated} updated, "
+        f"{report.skipped} skipped; "
         f"preset={report.preset}, media={len(report.media)}, synced={report.synced}."
     )
+    if report.skipped_card_ids:
+        print(
+            "Skipped CardID(s): " + ", ".join(report.skipped_card_ids),
+            file=sys.stderr,
+        )
     return 0
 
 

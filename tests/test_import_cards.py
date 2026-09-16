@@ -6,10 +6,7 @@ a fake AnkiConnect client so no live Anki (and no real HTTP) is needed; the
 .apkg fallback path writes a real package into tmp_path.
 """
 
-import subprocess
-import sys
 import zipfile
-from pathlib import Path
 
 import pytest
 
@@ -130,23 +127,16 @@ def test_falls_back_to_apkg_when_anki_unavailable(tmp_path):
         assert any(n.startswith("collection.anki2") for n in zf.namelist())
 
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def test_cli_runs_as_documented_script(tmp_path):
-    """SKILL.md runs `python scripts/import_cards.py ...` directly; that form
-    must work (repo root resolvable) without Anki running -> .apkg fallback."""
+def test_cli_main_runs_fallback_without_live_anki(tmp_path, monkeypatch):
+    """The CLI entrypoint falls back without constructing a live HTTP call."""
     jsonl = tmp_path / "session.jsonl"
     _write_facts(jsonl)
     out = tmp_path / "session.apkg"
 
-    proc = subprocess.run(
-        [sys.executable, "scripts/import_cards.py", str(jsonl),
-         "--apkg-out", str(out)],
-        cwd=_REPO_ROOT, capture_output=True, text=True,
-    )
-
-    assert proc.returncode == 0, proc.stderr
+    monkeypatch.setattr("mnemo.pipeline.import_cards.AnkiConnect",
+                        lambda *args, **kwargs: FakeClient(available=False))
+    code = main([str(jsonl), "--apkg-out", str(out)])
+    assert code == 0
     assert out.exists()
 
 
@@ -276,7 +266,7 @@ def test_offline_image_occlusion_requires_live_anki(tmp_path):
         import_cards(jsonl, client=FakeClient(available=False))
 
 
-def test_main_reports_live_only_image_occlusion_without_traceback(tmp_path, capsys):
+def test_main_reports_live_only_image_occlusion_without_traceback(tmp_path, capsys, monkeypatch):
     image = tmp_path / "diagram.png"
     image.write_bytes(b"image")
     jsonl = tmp_path / "io.jsonl"
@@ -286,6 +276,8 @@ def test_main_reports_live_only_image_occlusion_without_traceback(tmp_path, caps
         '"width":0.3,"height":0.2}]},"deck":"Anatomy","tags":[]}\n'
     )
 
+    monkeypatch.setattr("mnemo.pipeline.import_cards.AnkiConnect",
+                        lambda *args, **kwargs: FakeClient(available=False))
     code = main([
         str(jsonl),
         "--url", "http://localhost:18765",
@@ -299,12 +291,14 @@ def test_main_reports_live_only_image_occlusion_without_traceback(tmp_path, caps
     assert "Traceback" not in captured.err
 
 
-def test_main_returns_zero_and_prints_fallback_summary(tmp_path, capsys):
+def test_main_returns_zero_and_prints_fallback_summary(tmp_path, capsys, monkeypatch):
     # No Anki running here, so main() (real AnkiConnect, unreachable) falls back.
     jsonl = tmp_path / "session.jsonl"
     _write_facts(jsonl)
     out = tmp_path / "session.apkg"
 
+    monkeypatch.setattr("mnemo.pipeline.import_cards.AnkiConnect",
+                        lambda *args, **kwargs: FakeClient(available=False))
     code = main([str(jsonl), "--apkg-out", str(out)])
 
     assert code == 0

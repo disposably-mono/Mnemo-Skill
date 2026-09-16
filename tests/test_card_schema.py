@@ -138,6 +138,28 @@ def test_cloze_without_marker_rejected():
         )
 
 
+@pytest.mark.parametrize("text", [
+    "A {{c0::zero}} deletion.",
+    "A {{c1::}} deletion.",
+    "A {{c1::answer} deletion.",
+    "A {{c1::answer}} and {{c1:: incomplete.",
+])
+def test_malformed_cloze_markers_rejected(text):
+    with pytest.raises(CardValidationError, match="cloze"):
+        Fact.from_dict(
+            {"type": "cloze", "content": {"text": text},
+             "deck": "D", "tags": []}
+        )
+
+
+def test_cloze_with_hint_is_valid():
+    fact = Fact.from_dict(
+        {"type": "cloze", "content": {"text": "A {{c1::answer::hint}}."},
+         "deck": "D", "tags": []}
+    )
+    assert fact.content["text"] == "A {{c1::answer::hint}}."
+
+
 def test_cloze_marker_inside_inline_code_is_rejected():
     with pytest.raises(CardValidationError, match="cloze"):
         Fact.from_dict(

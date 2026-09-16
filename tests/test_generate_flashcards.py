@@ -132,6 +132,18 @@ def test_split_list_items_still_splits_genuine_enumerations():
     assert split_list_items("1, 2, 3") == ["1", "2", "3"]
 
 
+def test_split_list_items_preserves_or_within_one_item():
+    assert split_list_items("Elements, Interconnections, a function or purpose") == [
+        "Elements", "Interconnections", "a function or purpose",
+    ]
+
+
+def test_split_list_items_ignores_semicolons_inside_parentheses():
+    assert split_list_items("A (one; two), B, and C") == [
+        "A (one; two)", "B", "C",
+    ]
+
+
 def test_parse_steps_accepts_space_or_comma_separated_learning_steps():
     assert parse_steps("10m 1d") == ("10m", "1d")
     assert parse_steps("10m,1d") == ("10m", "1d")

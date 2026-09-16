@@ -103,15 +103,47 @@ def split_list_items(text: str) -> list[str]:
     if not text or not re.search(r"[,;]", text):
         return []
     protected, spans = protect_inline_verbatim(protect_thousands_commas(text))
-    if ";" in protected:
-        items = [part.strip(" .") for part in protected.split(";") if part.strip(" .")]
-    else:
-        normalized = re.sub(r",?\s+(?:and|or)\s+", ", ", protected, flags=re.IGNORECASE)
-        items = [part.strip(" .") for part in normalized.split(",") if part.strip(" .")]
+    separators = _top_level_list_separators(protected)
+    if not separators:
+        return []
+    delimiter = ";" if any(char == ";" for _, char in separators) else ","
+    parts = _split_top_level(protected, delimiter)
+    items = [part.strip(" .") for part in parts if part.strip(" .")]
+    items = [re.sub(r"^(?:and|or)\s+", "", item, flags=re.IGNORECASE)
+             for item in items]
     items = [restore_inline_verbatim(item.replace("\x00", ","), spans) for item in items]
     if len(items) < 2 or any(word_count(item) > MAX_LIST_ITEM_WORDS for item in items):
         return []
     return items
+
+
+def _top_level_list_separators(text: str) -> list[tuple[int, str]]:
+    depth = 0
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    closing = set(pairs.values())
+    separators: list[tuple[int, str]] = []
+    for index, char in enumerate(text):
+        if char in pairs:
+            depth += 1
+        elif char in closing:
+            depth = max(0, depth - 1)
+        elif depth == 0 and char in ",;":
+            separators.append((index, char))
+    return separators
+
+
+def _split_top_level(text: str, delimiter: str) -> list[str]:
+    boundaries = [index for index, char in _top_level_list_separators(text)
+                  if char == delimiter]
+    if not boundaries:
+        return [text]
+    parts: list[str] = []
+    start = 0
+    for boundary in boundaries:
+        parts.append(text[start:boundary])
+        start = boundary + 1
+    parts.append(text[start:])
+    return parts
 
 
 def enumerated_components(text: str) -> list[str]:

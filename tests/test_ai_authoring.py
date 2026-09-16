@@ -1,6 +1,7 @@
 import json
 import math
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -60,6 +61,20 @@ def test_json_ai_author_converts_structured_cards(tmp_path):
     assert cards[0].knowledge_unit_id == units[0].knowledge_unit_id
     assert cards[0].confidence == 0.88
     assert not [violation for violation in validate_card(cards[0]) if violation.level == "error"]
+
+
+def test_sanitized_fixture_replays_end_to_end():
+    units = [SourceUnit(
+        text="ATP synthase uses a proton gradient.", topic="Biology",
+        source="fixture.md", question="What does ATP synthase use?",
+        answer="A proton gradient.", knowledge_unit_id="unit-atp",
+        knowledge_kind="fact", learning_purpose="recall", origin="source",
+        confidence=1.0,
+    )]
+    fixture = Path(__file__).parent / "fixtures" / "ai_response_valid.json"
+    cards = JsonAiAuthor(FileAiProvider(fixture)).author(units)
+    assert len(cards) == 1
+    assert cards[0].card_id
 
 
 def test_json_ai_author_matches_deterministic_revision_hash_for_logically_equivalent_card(tmp_path):

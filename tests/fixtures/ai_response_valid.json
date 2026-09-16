@@ -1,0 +1,14 @@
+{
+  "cards": [
+    {
+      "front": "What does ATP synthase use?",
+      "back": "A proton gradient.",
+      "extra": "The source states ATP synthase uses a proton gradient.",
+      "card_type": "qa",
+      "tags": ["biology"],
+      "source_unit_id": "unit-atp",
+      "evidence": "ATP synthase uses a proton gradient.",
+      "confidence": 0.9
+    }
+  ]
+}

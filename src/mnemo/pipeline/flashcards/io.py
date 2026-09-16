@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Sequence
 
@@ -18,6 +20,41 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def regenerate_sidecar_fingerprints(csv_path: Path) -> tuple[Path, ...]:
+    """Refresh manifest/coverage CSV fingerprints atomically beside ``csv_path``."""
+    csv_path = Path(csv_path)
+    if not csv_path.exists():
+        raise FileNotFoundError(csv_path)
+    fingerprint = sha256_file(csv_path)
+    updated: list[Path] = []
+    for sidecar in (csv_path.with_suffix(".manifest.json"), csv_path.with_suffix(".coverage.json")):
+        if not sidecar.exists():
+            continue
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"sidecar must contain a JSON object: {sidecar}")
+        fingerprints = data.get("fingerprints")
+        if not isinstance(fingerprints, dict):
+            fingerprints = {}
+        data["fingerprints"] = {**fingerprints, "csv_sha256": fingerprint}
+        payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        fd, temp_name = tempfile.mkstemp(prefix=f".{sidecar.name}.", dir=sidecar.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, sidecar)
+        except BaseException:
+            try:
+                os.unlink(temp_name)
+            except FileNotFoundError:
+                pass
+            raise
+        updated.append(sidecar)
+    return tuple(updated)
 
 def write_csv(cards: Sequence[Card], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

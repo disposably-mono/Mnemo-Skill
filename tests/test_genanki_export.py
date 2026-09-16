@@ -78,6 +78,18 @@ def test_to_genanki_note_without_card_id_keeps_default_guid_behavior():
     assert guid_v1 != guid_v2
 
 
+def test_to_genanki_note_uses_fact_identity_when_model_has_no_card_id_field():
+    note_v1 = _basic_note(fields={"Front": "Q", "Back": "A1",
+                                  "Distractors": "", "Source": ""},
+                          identity="stable-1")
+    note_v2 = _basic_note(fields={"Front": "Q", "Back": "A2",
+                                  "Distractors": "", "Source": ""},
+                          identity="stable-1")
+    assert to_genanki_note(note_v1, MONO_BASIC).guid == to_genanki_note(
+        note_v2, MONO_BASIC
+    ).guid
+
+
 def test_export_writes_valid_apkg(tmp_path):
     out = tmp_path / "session.apkg"
     result = export_apkg([_basic_note()], out)

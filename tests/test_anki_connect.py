@@ -7,6 +7,8 @@ response detection); AnkiNote/adapter concept replaced by
 note_types.render_fields.
 """
 
+import json
+
 import pytest
 import responses
 
@@ -199,6 +201,89 @@ def test_add_notes_raises_on_result_length_mismatch():
             fields_list=[{"Front": "Q1", "Back": "A1"}, {"Front": "Q2", "Back": "A2"}],
             tags_list=[[], []],
         )
+
+
+@responses.activate
+def test_update_note_by_card_id_updates_exact_model_match():
+    responses.add(responses.POST, URL, json=_ok([101]))
+    responses.add(responses.POST, URL, json=_ok([{"noteId": 101, "modelName": "MONO Basic"}]))
+    responses.add(responses.POST, URL, json=_ok(None))
+
+    updated = AnkiConnect(url=URL).update_note_by_card_id(
+        card_id="w1m1-001", model="MONO Basic", fields={"Back": "Answer"},
+    )
+
+    assert updated is True
+    assert [json.loads(call.request.body)["action"] for call in responses.calls] == [
+        "findNotes", "notesInfo", "updateNoteFields",
+    ]
+    assert json.loads(responses.calls[0].request.body)["params"] == {
+        "query": 'CardID:"w1m1-001"',
+    }
+    assert json.loads(responses.calls[1].request.body)["params"] == {"notes": [101]}
+    assert json.loads(responses.calls[2].request.body)["params"] == {
+        "note": {"id": 101, "fields": {"Back": "Answer"}},
+    }
+
+
+@responses.activate
+def test_update_note_by_card_id_returns_false_when_no_note_matches():
+    responses.add(responses.POST, URL, json=_ok([]))
+
+    updated = AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
+
+    assert updated is False
+    assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_update_note_by_card_id_rejects_multiple_matches():
+    responses.add(responses.POST, URL, json=_ok([101, 102]))
+
+    with pytest.raises(AnkiConnectError, match="multiple notes"):
+        AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
+
+    assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_update_note_by_card_id_rejects_different_model():
+    responses.add(responses.POST, URL, json=_ok([101]))
+    responses.add(responses.POST, URL, json=_ok([{"noteId": 101, "modelName": "MONO Cloze"}]))
+
+    with pytest.raises(AnkiConnectError, match="belongs to 'MONO Cloze', expected 'MONO Basic'"):
+        AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
+
+    assert len(responses.calls) == 2
+
+
+@pytest.mark.parametrize("lookup_result", [None, {}, ["101"], [True]])
+@responses.activate
+def test_update_note_by_card_id_rejects_malformed_lookup_result(lookup_result):
+    responses.add(responses.POST, URL, json=_ok(lookup_result))
+
+    with pytest.raises(AnkiConnectError, match="invalid CardID match result"):
+        AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
+
+    assert len(responses.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "info_result",
+    [None, [], [{"noteId": 101, "modelName": "MONO Basic"}] * 2,
+     [{"noteId": 102, "modelName": "MONO Basic"}],
+     [{"noteId": 101}], [{"noteId": 101, "modelName": ""}],
+     [{"noteId": 101, "modelName": 123}]],
+)
+@responses.activate
+def test_update_note_by_card_id_rejects_malformed_note_info(info_result):
+    responses.add(responses.POST, URL, json=_ok([101]))
+    responses.add(responses.POST, URL, json=_ok(info_result))
+
+    with pytest.raises(AnkiConnectError, match="notesInfo"):
+        AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
+
+    assert len(responses.calls) == 2
 
 
 @responses.activate

@@ -236,6 +236,42 @@ class AnkiConnect:
         if card_ids:
             self._invoke("changeDeck", cards=card_ids, deck=deck)
 
+    def update_note_by_card_id(
+        self, card_id: str, model: str, fields: dict[str, str]
+    ) -> bool:
+        """Update one matching note in place; return False when it is absent."""
+        note_ids = self._invoke("findNotes", query=f'CardID:"{card_id}"')
+        if not isinstance(note_ids, list) or any(type(note_id) is not int for note_id in note_ids):
+            raise AnkiConnectError("findNotes returned an invalid CardID match result")
+        if not note_ids:
+            return False
+        if len(note_ids) != 1:
+            raise AnkiConnectError(f"CardID {card_id!r} matched multiple notes")
+
+        note_id = note_ids[0]
+        info = self._note_info(note_id)
+        if info["modelName"] != model:
+            raise AnkiConnectError(
+                f"CardID {card_id!r} belongs to {info['modelName']!r}, expected {model!r}"
+            )
+        self._invoke("updateNoteFields", note={"id": note_id, "fields": fields})
+        return True
+
+    def _note_info(self, note_id: int) -> dict[str, Any]:
+        infos = self._invoke("notesInfo", notes=[note_id])
+        if not isinstance(infos, list) or len(infos) != 1:
+            raise AnkiConnectError(f"notesInfo returned an invalid result for note {note_id}")
+        info = infos[0]
+        if (
+            not isinstance(info, dict)
+            or type(info.get("noteId")) is not int
+            or info["noteId"] != note_id
+            or not isinstance(info.get("modelName"), str)
+            or not info["modelName"]
+        ):
+            raise AnkiConnectError(f"notesInfo returned invalid note or model data for note {note_id}")
+        return info
+
     # --- sync --------------------------------------------------------------
 
     def sync(self) -> None:

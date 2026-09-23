@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+.worktrees/
+
+# Project runtime output
+cards/*
+!cards/.gitkeep
+*.apkg
+
+# Mnemo workspace private study files
+workspace/courses/**/source-materials/*
+workspace/courses/**/cards/*
+workspace/courses/**/module.yaml
+
+# Keep workspace scaffolding and templates tracked
+!workspace/
+!workspace/README.md
+!workspace/courses/
+!workspace/courses/_template/
+!workspace/courses/_template/README.md
+!workspace/courses/_template/course.yaml
+!workspace/courses/_template/00-module-template/
+!workspace/courses/_template/00-module-template/README.md
+!workspace/courses/_template/00-module-template/module.yaml
+!workspace/courses/_template/00-module-template/source-materials/.gitkeep
+!workspace/courses/_template/00-module-template/cards/.gitkeep
+
+# Local config (keep the .example, ignore the real one)
+config.toml
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code local (machine-specific permissions)
+.claude/settings.local.json

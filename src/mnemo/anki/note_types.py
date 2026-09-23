@@ -80,7 +80,9 @@ MONO_CSS = """\
   --font-serif: 'DM Serif Display', Georgia, serif;
   --font-sans: 'Outfit', system-ui, sans-serif;
   --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, monospace;
+  --hair: 0.5px;
   font-family: var(--font-sans);
+  font-weight: 300;
   font-size: 19px;
   line-height: 1.7;
   color: var(--text-primary);
@@ -108,10 +110,16 @@ MONO_CSS = """\
   color: var(--accent);
   margin-bottom: 10px;
 }
-.mono-q { font-family: var(--font-serif); font-size: 30px; line-height: 1.15; color: var(--text-primary); }
+.mono-q {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
 .mono-a { margin-top: 4px; }
 .cloze { font-weight: 500; color: var(--accent); }
-hr#answer { border: none; border-top: 0.5px solid var(--border); margin: 22px 0; }
+hr#answer { border: none; border-top: var(--hair) solid var(--border); margin: 22px 0; }
 .source { margin-top: 18px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--text-muted); }
 .mono-hints { margin-top: 18px; }
 #typeans { font-family: var(--font-mono); }

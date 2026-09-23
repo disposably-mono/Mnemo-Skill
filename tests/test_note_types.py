@@ -52,3 +52,15 @@ def test_referenced_fields_strips_section_markers_and_filters():
 
 def test_referenced_fields_ignores_builtin_tokens():
     assert referenced_fields("{{FrontSide}}{{Tags}}{{Deck}}") == set()
+
+
+def test_mono_css_preserves_legacy_presentation_details():
+    expected_rules = (
+        "font-weight: 300;",
+        "letter-spacing: -0.01em;",
+        "border-top: var(--hair) solid var(--border);",
+    )
+
+    for note_type in MONO_NOTE_TYPES.values():
+        for rule in expected_rules:
+            assert rule in note_type.css

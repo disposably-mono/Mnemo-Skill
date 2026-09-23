@@ -129,7 +129,10 @@ These bind the agent when authoring or rewriting cards (step 4):
 
 1. Test one independently gradable fact per card.
 2. Split detectable sentence boundaries, independent clauses, and enumerations.
-3. Keep `Front` below 20 words. Shorten or split anything longer.
+3. Keep `Front` below 150 characters. Shorten or split anything longer.
+   (Character length, not word count -- particle-heavy languages like
+   Tagalog need more words for the same complexity an English sentence
+   expresses more densely.)
 4. Keep estimated working-memory load at four components or fewer.
 5. Choose card format from the knowledge structure. Never manufacture variety.
 6. Add an acronym or visual association when a source concept has at least

@@ -92,16 +92,28 @@ def test_unknown_card_type_is_rejected():
         make_card(card_type="multiple-choice")
 
 
-def test_front_over_20_words_is_rejected():
-    long_front = " ".join(["word"] * 21)
-    with pytest.raises(CardValidationError, match="20 words"):
+def test_front_over_150_characters_is_rejected():
+    long_front = "a" * 151
+    with pytest.raises(CardValidationError, match="150 characters"):
         make_card(front=long_front)
 
 
-def test_front_of_exactly_20_words_is_accepted():
-    front20 = " ".join(["word"] * 20)
-    card = make_card(front=front20)
-    assert card.front == front20
+def test_front_of_exactly_150_characters_is_accepted():
+    front150 = "a" * 150
+    card = make_card(front=front150)
+    assert card.front == front150
+
+
+def test_particle_heavy_tagalog_front_within_char_limit_is_accepted():
+    # 23 words but under 150 characters -- word count alone would have
+    # rejected this real single-clause Tagalog front.
+    front = (
+        "Ang ginagamit sa pagtuturo sa pag-aaral sa mga eskuwelahan at ang "
+        "wika sa pagsulat ng mga aklat at kagamitan sa pagtuturo sa silid-aralan"
+    )
+    assert len(front.split()) == 23
+    card = make_card(front=front)
+    assert card.front == front
 
 
 def test_tag_containing_whitespace_is_rejected():

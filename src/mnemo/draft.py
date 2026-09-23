@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from mnemo.card import Card
+from mnemo.card import Card, CardValidationError
 from mnemo.ingest import Chunk
 
 _HEADING = re.compile(r"^#{1,6}\s+(.+)$")
@@ -68,7 +68,16 @@ def draft_cards(
             if heading_topic is not None:
                 topic = heading_topic
                 continue
-            card = _ground_block(block, topic=topic, source=chunk.source)
+            # A grounder can match a pattern but still fail Card's own
+            # validation (e.g. front too long) -- that must defer the block,
+            # not crash the whole draft run and lose every other card in it.
+            try:
+                card = _ground_block(block, topic=topic, source=chunk.source)
+            except CardValidationError as exc:
+                card = None
+                reason = f"matched a grounding pattern but failed validation: {exc}"
+            else:
+                reason = "no confident grounding pattern matched"
             if card is not None:
                 cards.append(card)
             else:
@@ -76,7 +85,7 @@ def draft_cards(
                     DeferredUnit(
                         text=block,
                         source=chunk.source,
-                        reason="no confident grounding pattern matched",
+                        reason=reason,
                     )
                 )
     return cards, deferred

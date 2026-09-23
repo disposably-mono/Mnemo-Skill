@@ -230,6 +230,35 @@ def test_stem_bullets_with_too_few_bullets_is_deferred():
     assert len(deferred) == 1
 
 
+def test_overlong_grounded_front_defers_instead_of_crashing():
+    # A Q:/A: block that matches the grounding pattern but whose front fails
+    # Card's own validation (too long) must defer that block, not raise an
+    # uncaught exception that kills the whole draft_cards() run.
+    long_front = "word " * 40
+    text = f"Q: {long_front.strip()}?\nA: short answer\n"
+
+    cards, deferred = draft_cards([Chunk(text=text, source="notes.md")])
+
+    assert cards == []
+    assert len(deferred) == 1
+    assert "failed validation" in deferred[0].reason
+
+
+def test_one_overlong_card_does_not_lose_other_grounded_cards_in_the_same_chunk():
+    long_front = "word " * 40
+    text = (
+        f"Q: {long_front.strip()}?\nA: short answer\n"
+        "\n"
+        "Q: What is ATP?\nA: Adenosine triphosphate.\n"
+    )
+
+    cards, deferred = draft_cards([Chunk(text=text, source="notes.md")])
+
+    assert len(cards) == 1
+    assert cards[0].front == "What is ATP?"
+    assert len(deferred) == 1
+
+
 def test_stem_bullets_with_mixed_non_bullet_line_is_deferred():
     text = "Organelles:\n- mitochondrion\nnot a bullet\n- ribosome\n"
     cards, deferred = draft_cards([Chunk(text=text, source="notes.md")])

@@ -22,7 +22,13 @@ CARD_TYPES: tuple[str, ...] = (
     "image-supported",
 )
 
-_MAX_FRONT_WORDS = 20
+# Character length, not word count: word count isn't a portable proxy for
+# recall load across languages. Particle-heavy languages (e.g. Tagalog's
+# short "sa"/"ng"/"ang"/"mga"/"at"/"na") inflate word count for the same
+# semantic complexity an English sentence expresses in fewer, denser words.
+# 150 chars comfortably fits a real single-clause Tagalog front while still
+# forcing genuine splitting of multi-clause prose (which runs 300+ chars).
+_MAX_FRONT_CHARS = 150
 _FIELDNAMES = (
     "Front",
     "Back",
@@ -69,8 +75,8 @@ def _validate_card(card: Card) -> None:
         raise CardValidationError("back must be a non-empty string")
     if card.card_type not in CARD_TYPES:
         raise CardValidationError(f"card_type must be one of {CARD_TYPES}")
-    if len(card.front.split()) > _MAX_FRONT_WORDS:
-        raise CardValidationError(f"front must be at most {_MAX_FRONT_WORDS} words")
+    if len(card.front) > _MAX_FRONT_CHARS:
+        raise CardValidationError(f"front must be at most {_MAX_FRONT_CHARS} characters")
     for tag in card.tags:
         if not tag or any(char.isspace() for char in tag):
             raise CardValidationError(f"tag {tag!r} must be a single non-empty word")

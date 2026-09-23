@@ -39,10 +39,17 @@ def _requests():
 
 @dataclass
 class AddResult:
-    """Outcome of an add_notes call."""
+    """Outcome of an add_notes call.
+
+    ``results`` keeps AnkiConnect's per-note-id response in submission
+    order (None where a note was skipped/refused), so a caller can identify
+    *which* submitted note was skipped -- reporting only an aggregate count
+    would make skipped cards unauditable.
+    """
 
     added: list[int]
     skipped: int
+    results: list[int | None]
 
 
 class AnkiConnect:
@@ -210,7 +217,7 @@ class AnkiConnect:
         note_ids = [nid for nid in result if nid is not None]
         skipped = len(result) - len(note_ids)
         self._pin_deck(note_ids, deck)
-        return AddResult(added=note_ids, skipped=skipped)
+        return AddResult(added=note_ids, skipped=skipped, results=list(result))
 
     def _pin_deck(self, note_ids: list[int], deck: str) -> None:
         """Force freshly-added notes' cards into ``deck``, verifying order defensively."""

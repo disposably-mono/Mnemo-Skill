@@ -1,5 +1,7 @@
 """Tests for the bundled MONO note types (mnemo/anki/note_types.py)."""
 
+import pytest
+
 from mnemo.anki.note_types import (
     MONO_BASIC,
     MONO_CLOZE,
@@ -28,6 +30,38 @@ def test_every_note_type_includes_card_id_and_source_fields():
     for note_type in MONO_NOTE_TYPES.values():
         assert "CardID" in note_type.fields
         assert "Source" in note_type.fields
+
+
+@pytest.mark.parametrize(
+    ("note_type", "expected_fields"),
+    [
+        (MONO_BASIC, ("Front", "Back", "Source", "CardID", "RevisionHash", "Extra", "Mnemonic")),
+        (MONO_CLOZE, ("Text", "Extra", "Source", "CardID", "RevisionHash", "Mnemonic")),
+        (MONO_TYPE, ("Prompt", "Answer", "Extra", "Source", "CardID", "RevisionHash", "Mnemonic")),
+        (MONO_OVERLAPPING, ("Title", "Text", "Source", "CardID", "RevisionHash", "Extra", "Mnemonic")),
+    ],
+)
+def test_note_type_preserves_existing_fields_and_appends_semantic_fields(note_type, expected_fields):
+    assert note_type.fields == expected_fields
+
+
+@pytest.mark.parametrize("note_type", [MONO_BASIC, MONO_CLOZE, MONO_TYPE, MONO_OVERLAPPING])
+def test_answer_template_renders_conditional_explanation_and_mnemonic_panels(note_type):
+    template = note_type.templates[0].afmt
+    assert 'class="mono-answer"' in template
+    assert '{{#Extra}}<section class="mono-explanation">' in template
+    assert '<div class="mono-label">Explanation</div>{{Extra}}</section>{{/Extra}}' in template
+    assert '{{#Mnemonic}}<section class="mono-mnemonic">' in template
+    assert '<div class="mono-label">Mnemonic</div>{{Mnemonic}}</section>{{/Mnemonic}}' in template
+    assert template.index('class="mono-answer"') < template.index('class="mono-explanation"')
+    assert template.index('class="mono-explanation"') < template.index('class="mono-mnemonic"')
+    assert template.index('class="mono-mnemonic"') < template.index('class="source"')
+
+
+def test_every_note_type_css_styles_semantic_blocks():
+    for note_type in MONO_NOTE_TYPES.values():
+        for selector in (".mono-answer", ".mono-explanation", ".mono-mnemonic"):
+            assert selector in note_type.css
 
 
 def test_mono_cloze_and_overlapping_are_marked_cloze():

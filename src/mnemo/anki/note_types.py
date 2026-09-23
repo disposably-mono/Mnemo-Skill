@@ -118,6 +118,15 @@ MONO_CSS = """\
   color: var(--text-primary);
 }
 .mono-a { margin-top: 4px; }
+.mono-answer { margin-top: 4px; }
+.mono-explanation, .mono-mnemonic {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: var(--hair) solid var(--border);
+  border-radius: 12px;
+  font-size: 15px;
+}
+.mono-mnemonic { color: var(--highlight); }
 .cloze { font-weight: 500; color: var(--accent); }
 hr#answer { border: none; border-top: var(--hair) solid var(--border); margin: 22px 0; }
 .source { margin-top: 18px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--text-muted); }
@@ -126,10 +135,18 @@ hr#answer { border: none; border-top: var(--hair) solid var(--border); margin: 2
 """
 
 _SOURCE_BLOCK = '{{#Source}}<div class="source">{{Source}}</div>{{/Source}}'
+_EXPLANATION_BLOCK = (
+    '{{#Extra}}<section class="mono-explanation">'
+    '<div class="mono-label">Explanation</div>{{Extra}}</section>{{/Extra}}'
+)
+_MNEMONIC_BLOCK = (
+    '{{#Mnemonic}}<section class="mono-mnemonic">'
+    '<div class="mono-label">Mnemonic</div>{{Mnemonic}}</section>{{/Mnemonic}}'
+)
 
 MONO_BASIC = NoteType(
     name="MONO Basic",
-    fields=("Front", "Back", "Source", "CardID", "RevisionHash"),
+    fields=("Front", "Back", "Source", "CardID", "RevisionHash", "Extra", "Mnemonic"),
     templates=(
         CardTemplate(
             name="Card 1",
@@ -137,7 +154,9 @@ MONO_BASIC = NoteType(
             afmt=(
                 "{{FrontSide}}"
                 '<hr id="answer">'
-                '<div class="mono-a">{{Back}}</div>'
+                '<div class="mono-answer">{{Back}}</div>'
+                + _EXPLANATION_BLOCK
+                + _MNEMONIC_BLOCK
                 + _SOURCE_BLOCK
             ),
         ),
@@ -148,15 +167,16 @@ MONO_BASIC = NoteType(
 
 MONO_CLOZE = NoteType(
     name="MONO Cloze",
-    fields=("Text", "Extra", "Source", "CardID", "RevisionHash"),
+    fields=("Text", "Extra", "Source", "CardID", "RevisionHash", "Mnemonic"),
     templates=(
         CardTemplate(
             name="Cloze",
             qfmt='<div class="mono-label">Fill in</div><div class="mono-a">{{cloze:Text}}</div>',
             afmt=(
                 '<div class="mono-label">Fill in</div>'
-                '<div class="mono-a">{{cloze:Text}}</div>'
-                '{{#Extra}}<div class="mono-a">{{Extra}}</div>{{/Extra}}'
+                '<div class="mono-answer">{{cloze:Text}}</div>'
+                + _EXPLANATION_BLOCK
+                + _MNEMONIC_BLOCK
                 + _SOURCE_BLOCK
             ),
         ),
@@ -167,14 +187,16 @@ MONO_CLOZE = NoteType(
 
 MONO_OVERLAPPING = NoteType(
     name="MONO Overlapping",
-    fields=("Title", "Text", "Source", "CardID", "RevisionHash"),
+    fields=("Title", "Text", "Source", "CardID", "RevisionHash", "Extra", "Mnemonic"),
     templates=(
         CardTemplate(
             name="Overlapping",
             qfmt='<div class="mono-label">{{Title}}</div><div class="mono-a">{{cloze:Text}}</div>',
             afmt=(
                 '<div class="mono-label">{{Title}}</div>'
-                '<div class="mono-a">{{cloze:Text}}</div>'
+                '<div class="mono-answer">{{cloze:Text}}</div>'
+                + _EXPLANATION_BLOCK
+                + _MNEMONIC_BLOCK
                 + _SOURCE_BLOCK
             ),
         ),
@@ -185,7 +207,7 @@ MONO_OVERLAPPING = NoteType(
 
 MONO_TYPE = NoteType(
     name="MONO Type",
-    fields=("Prompt", "Answer", "Extra", "Source", "CardID", "RevisionHash"),
+    fields=("Prompt", "Answer", "Extra", "Source", "CardID", "RevisionHash", "Mnemonic"),
     templates=(
         CardTemplate(
             name="Typed Answer",
@@ -197,8 +219,9 @@ MONO_TYPE = NoteType(
                 '<div class="mono-label">Type the answer</div>'
                 '<div class="mono-q">{{Prompt}}</div>'
                 '<hr id="answer">{{type:Answer}}'
-                '<div class="mono-a">{{Answer}}</div>'
-                '{{#Extra}}<div class="mono-a">{{Extra}}</div>{{/Extra}}'
+                '<div class="mono-answer">{{Answer}}</div>'
+                + _EXPLANATION_BLOCK
+                + _MNEMONIC_BLOCK
                 + _SOURCE_BLOCK
             ),
         ),
@@ -234,12 +257,9 @@ class RenderError(ValueError):
 def render_fields(card, note_type: NoteType) -> dict[str, str]:
     """Render a mnemo.card.Card into this note type's exact field set.
 
-    Extra/Mnemonic are manifest fields for human/agent authoring
-    convenience; note types without their own Extra field (Basic,
-    Overlapping) fold that text into their primary answer field instead of
-    silently dropping it. Dispatches on identity (not name) so a caller
-    can't accidentally route through a same-named but differently-shaped
-    NoteType.
+    Preserve answer, explanation, and mnemonic in independent fields.
+    Dispatch on identity so a same-named, differently-shaped NoteType
+    cannot accidentally use the wrong renderer.
     """
     if note_type is MONO_BASIC:
         return _basic_fields(card)
@@ -252,13 +272,6 @@ def render_fields(card, note_type: NoteType) -> dict[str, str]:
     raise ValueError(f"no field renderer for note type {note_type.name!r}")
 
 
-def _extra_text(card) -> str:
-    parts = [card.extra.strip()] if card.extra.strip() else []
-    if card.mnemonic.strip():
-        parts.append(f"Mnemonic: {card.mnemonic.strip()}")
-    return "\n\n".join(parts)
-
-
 def _common_fields(card) -> dict[str, str]:
     return {
         "Source": card.source or "",
@@ -268,19 +281,23 @@ def _common_fields(card) -> dict[str, str]:
 
 
 def _basic_fields(card) -> dict[str, str]:
-    extra = _extra_text(card)
-    back = f"{card.back}\n\n{extra}" if extra else card.back
-    return {"Front": card.front, "Back": back, **_common_fields(card)}
+    return {
+        "Front": card.front, "Back": card.back, **_common_fields(card),
+        "Extra": card.extra, "Mnemonic": card.mnemonic,
+    }
 
 
 def _cloze_fields(card) -> dict[str, str]:
-    return {"Text": card.front, "Extra": _extra_text(card), **_common_fields(card)}
+    return {
+        "Text": card.front, "Extra": card.extra, **_common_fields(card),
+        "Mnemonic": card.mnemonic,
+    }
 
 
 def _type_fields(card) -> dict[str, str]:
     return {
-        "Prompt": card.front, "Answer": card.back, "Extra": _extra_text(card),
-        **_common_fields(card),
+        "Prompt": card.front, "Answer": card.back, "Extra": card.extra,
+        **_common_fields(card), "Mnemonic": card.mnemonic,
     }
 
 
@@ -295,4 +312,7 @@ def _overlapping_fields(card) -> dict[str, str]:
     # syntax (e.g. a pasted "{{c1::...}}" from another card).
     items = [item.replace("{{", "&#123;&#123;").replace("}}", "&#125;&#125;") for item in raw_items]
     text = ", ".join(f"{{{{c{i}::{item}}}}}" for i, item in enumerate(items, start=1))
-    return {"Title": card.topic or "", "Text": text, **_common_fields(card)}
+    return {
+        "Title": card.topic or "", "Text": text, **_common_fields(card),
+        "Extra": card.extra, "Mnemonic": card.mnemonic,
+    }

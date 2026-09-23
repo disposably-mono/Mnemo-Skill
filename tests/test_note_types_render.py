@@ -36,8 +36,9 @@ def test_render_fields_for_qa_card():
     fields = render_fields(card, MONO_NOTE_TYPES["MONO Basic"])
 
     assert fields["Front"] == "What is ATP?"
-    assert "Adenosine triphosphate." in fields["Back"]
-    assert "it stores energy" in fields["Back"]
+    assert fields["Back"] == "Adenosine triphosphate."
+    assert fields["Extra"] == "Explanation: it stores energy."
+    assert fields["Mnemonic"] == ""
     assert fields["Source"] == "notes.md"
     assert fields["CardID"] == "c1"
     assert set(fields) == set(MONO_NOTE_TYPES["MONO Basic"].fields)
@@ -49,7 +50,8 @@ def test_render_fields_includes_mnemonic_when_present():
         mnemonic="A-T-P: Any Time Power", card_type="qa",
     )
     fields = render_fields(card, MONO_NOTE_TYPES["MONO Basic"])
-    assert "Any Time Power" in fields["Back"]
+    assert fields["Back"] == "Adenosine triphosphate."
+    assert fields["Mnemonic"] == "A-T-P: Any Time Power"
 
 
 def test_render_fields_for_cloze_card():
@@ -61,7 +63,27 @@ def test_render_fields_for_cloze_card():
     )
     fields = render_fields(card, MONO_NOTE_TYPES["MONO Cloze"])
     assert fields["Text"] == card.front
-    assert "oxidative phosphorylation" in fields["Extra"]
+    assert fields["Extra"] == "Explanation: oxidative phosphorylation."
+
+
+@pytest.mark.parametrize(
+    ("card_type", "note_type_name"),
+    [("qa", "MONO Basic"), ("cloze", "MONO Cloze"),
+     ("typed", "MONO Type"), ("list", "MONO Overlapping")],
+)
+def test_render_fields_keeps_yaml_explanation_and_mnemonic_verbatim(card_type, note_type_name):
+    card = Card(
+        front="Question", back="first; second" if card_type == "list" else "Answer",
+        extra="  Why it works.\nSecond line  ", mnemonic="  Memory hook  ",
+        card_type=card_type,
+    )
+    note_type = MONO_NOTE_TYPES[note_type_name]
+    fields = render_fields(card, note_type)
+    assert fields["Extra"] == "  Why it works.\nSecond line  "
+    assert fields["Mnemonic"] == "  Memory hook  "
+    assert set(fields) == set(note_type.fields)
+    if card_type in ("qa", "typed"):
+        assert fields["Back" if card_type == "qa" else "Answer"] == card.back
 
 
 def test_render_fields_for_typed_card():

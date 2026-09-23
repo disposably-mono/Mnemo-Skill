@@ -14,12 +14,17 @@ from urllib.parse import urlparse
 
 DEFAULT_URL = "http://localhost:8765"
 
-# The canonical card-type -> default MONO note-type registry.
+# The canonical card-type -> default MONO note-type registry. "reverse" and
+# "image-supported" both render into MONO Basic (a source image is embedded
+# inline in Front/Back HTML, not a dedicated field; "reverse" adds a second
+# Anki card template on the same note type rather than a distinct one).
 DEFAULT_CARD_TARGETS = {
     "qa": "MONO Basic",
     "cloze": "MONO Cloze",
     "list": "MONO Overlapping",
     "typed": "MONO Type",
+    "reverse": "MONO Basic",
+    "image-supported": "MONO Basic",
 }
 
 VALID_SCHEDULERS = {"fsrs"}

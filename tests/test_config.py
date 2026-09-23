@@ -24,6 +24,8 @@ def test_defaults_when_no_file(tmp_path):
         "cloze": "MONO Cloze",
         "list": "MONO Overlapping",
         "typed": "MONO Type",
+        "reverse": "MONO Basic",
+        "image-supported": "MONO Basic",
     }
 
 
@@ -77,6 +79,8 @@ def test_default_card_targets_is_public_and_owned_by_config():
         "cloze": "MONO Cloze",
         "list": "MONO Overlapping",
         "typed": "MONO Type",
+        "reverse": "MONO Basic",
+        "image-supported": "MONO Basic",
     }
     assert Config().card_targets == DEFAULT_CARD_TARGETS
 

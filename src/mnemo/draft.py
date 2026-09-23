@@ -211,25 +211,28 @@ def _ground_definition_line(
         return None
     if not _looks_like_a_definable_term(term):
         return None
-    term_to_definition = Card(
-        front=f"What is {_lower_first(term)}?",
-        back=_capitalize_first(definition),
-        card_type="qa",
-        topic=topic,
-        source=source,
-    )
-    definition_to_term = Card(
-        front=f"What is the term for {definition.rstrip('.!?')}?",
-        back=term,
-        card_type="qa",
-        topic=topic,
-        source=source,
-    )
-    if directions == "term-to-definition":
-        return term_to_definition
-    if directions == "definition-to-term":
-        return definition_to_term
-    return [term_to_definition, definition_to_term]
+    cards: list[Card] = []
+    if directions in {"term-to-definition", "both"}:
+        cards.append(
+            Card(
+                front=f"What is {_lower_first(term)}?",
+                back=_capitalize_first(definition),
+                card_type="qa",
+                topic=topic,
+                source=source,
+            )
+        )
+    if directions in {"definition-to-term", "both"}:
+        cards.append(
+            Card(
+                front=f"What is the term for {definition.rstrip('.!?')}?",
+                back=term,
+                card_type="qa",
+                topic=topic,
+                source=source,
+            )
+        )
+    return cards[0] if len(cards) == 1 else cards
 
 
 def _looks_like_a_definable_term(term: str) -> bool:

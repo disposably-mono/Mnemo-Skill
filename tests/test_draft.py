@@ -85,6 +85,22 @@ def test_definition_line_can_generate_term_to_definition_only():
     ]
 
 
+def test_forward_definition_generation_ignores_overlong_unrequested_reverse_front():
+    definition = (
+        "A detailed definition "
+        + "with additional context " * 7
+        + "with additional context"
+    )
+    cards, deferred = draft_cards(
+        [Chunk(text=f"Wika: {definition}", source="notes.md")]
+    )
+
+    assert deferred == []
+    assert [(card.front, card.back) for card in cards] == [
+        ("What is wika?", definition)
+    ]
+
+
 def test_definition_line_can_generate_definition_to_term_only():
     cards, deferred = draft_cards(
         [Chunk(text="Wika: Isang sistema ng mga simbolo.", source="notes.md")],

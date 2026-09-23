@@ -204,6 +204,22 @@ def test_add_notes_raises_on_result_length_mismatch():
 
 
 @responses.activate
+def test_find_note_id_by_card_id_resolves_exact_match_without_writing():
+    responses.add(responses.POST, URL, json=_ok([101]))
+    responses.add(responses.POST, URL, json=_ok([{
+        "noteId": 101, "modelName": "MONO Basic",
+        "fields": {"CardID": {"value": "w1m1-001", "order": 3}},
+    }]))
+
+    note_id = AnkiConnect(url=URL).find_note_id_by_card_id("w1m1-001", "MONO Basic")
+
+    assert note_id == 101
+    assert [json.loads(call.request.body)["action"] for call in responses.calls] == [
+        "findNotes", "notesInfo",
+    ]
+
+
+@responses.activate
 def test_update_note_by_card_id_updates_exact_model_match():
     responses.add(responses.POST, URL, json=_ok([101]))
     responses.add(responses.POST, URL, json=_ok([{

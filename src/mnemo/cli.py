@@ -119,31 +119,42 @@ def _require_deck_manifest_path(path: Path) -> None:
         raise ValueError("only .mnemo.yaml deck manifests are supported")
 
 
+def _prepare_ankiconnect_import(
+    cards: list[Card], ankiconnect: AnkiConnect, update_existing: bool,
+) -> dict[str, list[tuple[Card, dict[str, str], int | None]]]:
+    if update_existing and any(not card.card_id or not card.card_id.strip() for card in cards):
+        raise ValueError("--update-existing requires a non-empty CardID for every card")
+    by_model: dict[str, list[tuple[Card, dict[str, str], int | None]]] = {}
+    for card in cards:
+        model = note_type_for(card.card_type).name
+        fields = render_fields(card, MONO_NOTE_TYPES[model])
+        note_id = (
+            ankiconnect.find_note_id_by_card_id(card.card_id, model)
+            if update_existing else None
+        )
+        by_model.setdefault(model, []).append((card, fields, note_id))
+    return by_model
+
+
 def _import_via_ankiconnect(
     cards: list[Card], deck: str, config: Config, ankiconnect: AnkiConnect,
     *, update_existing: bool = False,
 ) -> int:
-    if update_existing and any(not card.card_id or not card.card_id.strip() for card in cards):
-        raise ValueError("--update-existing requires a non-empty CardID for every card")
+    by_model = _prepare_ankiconnect_import(cards, ankiconnect, update_existing)
     ankiconnect.ensure_deck(deck)
     ankiconnect.ensure_note_types(MONO_NOTE_TYPES.values())
-    by_model: dict[str, list[Card]] = {}
-    for card in cards:
-        model = note_type_for(card.card_type).name
-        by_model.setdefault(model, []).append(card)
     total_added = 0
     total_updated = 0
     skipped_cards: list[Card] = []
-    for model, model_cards in by_model.items():
-        note_type = MONO_NOTE_TYPES[model]
-        rendered = [(card, render_fields(card, note_type)) for card in model_cards]
+    for model, model_entries in by_model.items():
+        for _, fields, note_id in model_entries:
+            if note_id is not None:
+                ankiconnect.update_note_fields(note_id, fields)
+                total_updated += 1
         to_add = [
-            (card, fields) for card, fields in rendered
-            if not update_existing or not ankiconnect.update_note_by_card_id(
-                card.card_id, model, fields,
-            )
+            (card, fields) for card, fields, note_id in model_entries
+            if note_id is None
         ]
-        total_updated += len(rendered) - len(to_add)
         if not to_add:
             continue
         result = ankiconnect.add_notes(

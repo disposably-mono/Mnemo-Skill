@@ -240,11 +240,19 @@ class AnkiConnect:
         self, card_id: str, model: str, fields: dict[str, str]
     ) -> bool:
         """Update one matching note in place; return False when it is absent."""
+        note_id = self.find_note_id_by_card_id(card_id, model)
+        if note_id is None:
+            return False
+        self.update_note_fields(note_id, fields)
+        return True
+
+    def find_note_id_by_card_id(self, card_id: str, model: str) -> int | None:
+        """Resolve one exact model/CardID match without changing its fields."""
         note_ids = self._invoke("findNotes", query=f'CardID:"{card_id}"')
         if not isinstance(note_ids, list) or any(type(note_id) is not int for note_id in note_ids):
             raise AnkiConnectError("findNotes returned an invalid CardID match result")
         if not note_ids:
-            return False
+            return None
         if len(note_ids) != 1:
             raise AnkiConnectError(f"CardID {card_id!r} matched multiple notes")
 
@@ -260,8 +268,11 @@ class AnkiConnect:
                 f"CardID {card_id!r} lookup returned note {note_id} "
                 f"with CardID {actual_card_id!r}; refusing to update"
             )
+        return note_id
+
+    def update_note_fields(self, note_id: int, fields: dict[str, str]) -> None:
+        """Write fields on a note already resolved by the caller."""
         self._invoke("updateNoteFields", note={"id": note_id, "fields": fields})
-        return True
 
     def _note_info(self, note_id: int) -> dict[str, Any]:
         infos = self._invoke("notesInfo", notes=[note_id])

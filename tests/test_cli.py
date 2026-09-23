@@ -221,6 +221,43 @@ def test_import_update_existing_falls_back_to_apkg_without_updating(tmp_path, ca
 
 
 @responses.activate
+@pytest.mark.parametrize("invalid_result", [[901, 902], [901]])
+@pytest.mark.parametrize("first_result", [[900], []])
+def test_import_update_existing_preflights_all_targets_before_writes(
+    tmp_path, capsys, invalid_result, first_result,
+):
+    path = write_test_deck(tmp_path, cards=[
+        Card(front="First", back="Updated first", card_id="first"),
+        Card(front="Second", back="Updated second", card_id="second"),
+    ])
+
+    def callback(request):
+        body = json.loads(request.body)
+        if body["action"] == "updateNoteFields":
+            return (200, {}, json.dumps(_ok(None)))
+        if body["action"] == "findNotes":
+            result = first_result if body["params"]["query"] == 'CardID:"first"' else invalid_result
+            return (200, {}, json.dumps(_ok(result)))
+        if body["action"] == "notesInfo":
+            note_id = body["params"]["notes"][0]
+            model = "MONO Cloze" if note_id == 901 else "MONO Basic"
+            return (200, {}, json.dumps(_ok([{
+                "noteId": note_id, "modelName": model,
+                "fields": {"CardID": {"value": "first" if note_id == 900 else "second"}},
+            }])))
+        return _dispatching_ankiconnect_callback(request)
+
+    responses.add_callback(responses.POST, URL, callback=callback)
+
+    assert main(["import", str(path), "--update-existing"]) == 1
+    assert "CardID" in capsys.readouterr().err
+    actions = [json.loads(call.request.body)["action"] for call in responses.calls]
+    assert "findNotes" in actions
+    assert "updateNoteFields" not in actions
+    assert "addNotes" not in actions
+
+
+@responses.activate
 def test_cmd_import_falls_back_to_apkg_when_ankiconnect_unavailable(tmp_path):
     from contextlib import closing
     import requests

@@ -1,0 +1,32 @@
+# Copy to config.toml and edit. config.toml is gitignored.
+# Every setting has a built-in default (see mnemo/config.py); this file only
+# needs to set the keys you want to override.
+
+[anki]
+# AnkiConnect add-on (code 2055492159) exposes this local HTTP API while
+# Anki desktop is running. Must be http on localhost/127.0.0.1/::1.
+ankiconnect_url = "http://localhost:8765"
+# Trigger an AnkiWeb sync after a successful import (pushes cards to phone).
+sync_after_import = true
+
+[decks]
+# Default deck when none is given on the command line.
+default_deck = "Inbox"
+
+[tags]
+# Every auto-generated card gets this tag so they're easy to find/bulk-edit.
+auto_tag = "auto"
+
+[scheduler]
+# FSRS is Anki's current recommended scheduler.
+desired_retention = 0.9
+new_cards_per_day = 20
+
+[card_targets]
+# Which MONO note type each card type maps to by default.
+qa = "MONO Basic"
+cloze = "MONO Cloze"
+list = "MONO Overlapping"
+typed = "MONO Type"
+reverse = "MONO Basic"
+image-supported = "MONO Basic"

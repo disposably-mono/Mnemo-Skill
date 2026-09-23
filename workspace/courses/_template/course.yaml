@@ -1,0 +1,6 @@
+courseSlug: course-slug
+courseTitle: Course Title
+term: 2026-term
+defaultDeck: Mnemo::Course Title
+tags:
+  - course-tag

@@ -1,0 +1,7 @@
+moduleSlug: 00-module-template
+moduleTitle: Module Title
+courseSlug: course-slug
+sourceStatus: pending
+cardStatus: pending
+tags:
+  - module-tag

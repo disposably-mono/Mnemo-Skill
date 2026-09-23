@@ -193,7 +193,7 @@ def test_draft_ocr_and_lang_flags_are_threaded_through_to_ingest(tmp_path, monke
     cards_out = tmp_path / "cards.csv"
     seen = {}
 
-    def fake_ingest(path, *, ocr=False, extract_images=None, language="eng"):
+    def fake_ingest(path, *, ocr=False, extract_images=None, language="eng", **kwargs):
         seen["ocr"] = ocr
         seen["language"] = language
         return []
@@ -203,7 +203,8 @@ def test_draft_ocr_and_lang_flags_are_threaded_through_to_ingest(tmp_path, monke
     exit_code = main(["draft", str(source), "-o", str(cards_out), "--ocr", "--lang", "fil"])
 
     assert exit_code == 0
-    assert seen == {"ocr": True, "language": "fil"}
+    assert seen["ocr"] is True
+    assert seen["language"] == "fil"
 
 
 def test_ingest_lang_flag_defaults_to_english(tmp_path, monkeypatch):
@@ -213,7 +214,7 @@ def test_ingest_lang_flag_defaults_to_english(tmp_path, monkeypatch):
     source.write_text("not a real pdf, ingest() is stubbed below")
     seen = {}
 
-    def fake_ingest(path, *, ocr=False, extract_images=None, language="eng"):
+    def fake_ingest(path, *, ocr=False, extract_images=None, language="eng", **kwargs):
         seen["language"] = language
         return []
 
@@ -222,6 +223,59 @@ def test_ingest_lang_flag_defaults_to_english(tmp_path, monkeypatch):
     main(["ingest", str(source)])
 
     assert seen["language"] == "eng"
+
+
+def test_ingest_pages_and_prose_lang_flags_are_parsed_and_threaded(tmp_path, monkeypatch):
+    import mnemo.cli as cli_module
+
+    source = tmp_path / "notes.pdf"
+    source.write_text("not a real pdf, ingest() is stubbed below")
+    seen = {}
+
+    def fake_ingest(path, *, ocr=False, extract_images=None, language="eng",
+                     pages=None, prose_language=None):
+        seen["pages"] = pages
+        seen["prose_language"] = prose_language
+        return []
+
+    monkeypatch.setattr(cli_module, "ingest", fake_ingest)
+
+    main(["ingest", str(source), "--pages", "1-30", "--prose-lang", "fil"])
+
+    assert seen == {"pages": (1, 30), "prose_language": "fil"}
+
+
+def test_draft_pages_and_prose_lang_flags_are_parsed_and_threaded(tmp_path, monkeypatch):
+    import mnemo.cli as cli_module
+
+    source = tmp_path / "notes.pdf"
+    source.write_text("not a real pdf, ingest() is stubbed below")
+    cards_out = tmp_path / "cards.csv"
+    seen = {}
+
+    def fake_ingest(path, *, ocr=False, extract_images=None, language="eng",
+                     pages=None, prose_language=None):
+        seen["pages"] = pages
+        seen["prose_language"] = prose_language
+        return []
+
+    monkeypatch.setattr(cli_module, "ingest", fake_ingest)
+
+    main(["draft", str(source), "-o", str(cards_out), "--pages", "1-10", "--prose-lang", "eng"])
+
+    assert seen == {"pages": (1, 10), "prose_language": "eng"}
+
+
+def test_invalid_page_range_is_a_clean_argparse_error(capsys):
+    with pytest.raises(SystemExit):
+        main(["ingest", "notes.pdf", "--pages", "not-a-range"])
+    assert "invalid page range" in capsys.readouterr().err
+
+
+def test_page_range_end_before_start_is_rejected(capsys):
+    with pytest.raises(SystemExit):
+        main(["ingest", "notes.pdf", "--pages", "10-5"])
+    assert "invalid page range" in capsys.readouterr().err
 
 
 @responses.activate

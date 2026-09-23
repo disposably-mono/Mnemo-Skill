@@ -32,8 +32,14 @@ def cmd_ingest(
     ocr: bool = False,
     extract_images: Path | None = None,
     language: str = "eng",
+    pages: tuple[int, int] | None = None,
+    prose_language: str | None = None,
 ) -> int:
-    for chunk in ingest(source, ocr=ocr, extract_images=extract_images, language=language):
+    chunks = ingest(
+        source, ocr=ocr, extract_images=extract_images, language=language,
+        pages=pages, prose_language=prose_language,
+    )
+    for chunk in chunks:
         print(f"--- {chunk.source} ---")
         print(chunk.text)
         print()
@@ -47,8 +53,12 @@ def cmd_draft(
     *,
     ocr: bool = False,
     language: str = "eng",
+    pages: tuple[int, int] | None = None,
+    prose_language: str | None = None,
 ) -> int:
-    chunks = ingest(source, ocr=ocr, language=language)
+    chunks = ingest(
+        source, ocr=ocr, language=language, pages=pages, prose_language=prose_language,
+    )
     cards, deferred = draft_cards(chunks)
     write_cards(cards_out, cards)
     # Named after cards_out's stem (not a fixed "deferred.md") so drafting
@@ -136,6 +146,19 @@ def cmd_export_note_types(config_path: Path | None) -> int:
     return 0
 
 
+def _parse_page_range(value: str) -> tuple[int, int]:
+    parts = value.replace(":", "-").split("-")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError(f"invalid page range {value!r}, expected START-END")
+    try:
+        start, end = int(parts[0]), int(parts[1])
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid page range {value!r}, expected START-END")
+    if start < 1 or end < start:
+        raise argparse.ArgumentTypeError(f"invalid page range {value!r}: start must be >=1, end >= start")
+    return (start, end)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mnemo", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -145,6 +168,11 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument("--ocr", action="store_true")
     ingest_parser.add_argument("--lang", default="eng", dest="language")
     ingest_parser.add_argument("--extract-images", type=Path, metavar="DIR")
+    ingest_parser.add_argument("--pages", type=_parse_page_range, metavar="START-END")
+    ingest_parser.add_argument(
+        "--prose-lang", choices=("fil", "eng"), default=None, dest="prose_language",
+        help="Keep only PDF pages confidently classified as this prose language.",
+    )
 
     draft_parser = subparsers.add_parser("draft", help="Draft cards from a source.")
     draft_parser.add_argument("source", type=Path)
@@ -152,6 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
     draft_parser.add_argument("--deferred", type=Path, default=None)
     draft_parser.add_argument("--ocr", action="store_true")
     draft_parser.add_argument("--lang", default="eng", dest="language")
+    draft_parser.add_argument("--pages", type=_parse_page_range, metavar="START-END")
+    draft_parser.add_argument(
+        "--prose-lang", choices=("fil", "eng"), default=None, dest="prose_language",
+        help="Keep only PDF pages confidently classified as this prose language.",
+    )
 
     audit_parser = subparsers.add_parser("audit", help="Audit a cards CSV against the rubric.")
     audit_parser.add_argument("cards_csv", type=Path)
@@ -186,12 +219,13 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "ingest":
         return cmd_ingest(
             args.source, ocr=args.ocr, extract_images=args.extract_images,
-            language=args.language,
+            language=args.language, pages=args.pages, prose_language=args.prose_language,
         )
     if args.command == "draft":
         return cmd_draft(
             args.source, args.cards_out, args.deferred,
             ocr=args.ocr, language=args.language,
+            pages=args.pages, prose_language=args.prose_language,
         )
     if args.command == "audit":
         return cmd_audit(args.cards_csv)

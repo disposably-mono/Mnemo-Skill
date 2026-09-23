@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from mnemo.ingest import Chunk
+from mnemo.ingest.language import classify_language
 
 _logger = logging.getLogger(__name__)
 
@@ -215,14 +216,28 @@ def _extract_pdf_images(
     return markers
 
 
+def _should_skip_language(text: str, prose_language: str) -> bool:
+    detected = classify_language(text)
+    return detected != "unknown" and detected != prose_language
+
+
 def ingest_pdf(
     path: Path,
     *,
     ocr: bool = False,
     extract_images: Path | None = None,
     language: str = "eng",
+    pages: tuple[int, int] | None = None,
+    prose_language: str | None = None,
 ) -> list[Chunk]:
-    """Ingest a PDF: one Chunk per non-blank page, with table/math/figure markers."""
+    """Ingest a PDF: one Chunk per non-blank page, with table/math/figure markers.
+
+    ``pages`` is an inclusive 1-indexed (start, end) range; out-of-range
+    ends are clamped, not an error. ``prose_language`` ("fil" or "eng")
+    keeps only pages classify_language() confidently identifies as that
+    language, per mnemo.ingest.language -- a page it can't confidently
+    classify ("unknown") is always kept, never silently dropped.
+    """
     import fitz  # PyMuPDF
 
     chunks: list[Chunk] = []
@@ -233,6 +248,8 @@ def ingest_pdf(
     ).hexdigest()[:12]
     with fitz.open(str(path)) as doc:
         for index, page in enumerate(doc, start=1):
+            if pages is not None and not (pages[0] <= index <= pages[1]):
+                continue
             source = f"{path.name} p.{index}"
             figures = (
                 _extract_pdf_images(doc, page, path, index, extract_images, source_identity)
@@ -241,6 +258,8 @@ def ingest_pdf(
             )
             text = page.get_text().strip()
             if text:
+                if prose_language is not None and _should_skip_language(text, prose_language):
+                    continue
                 parts = [
                     text,
                     *_extract_pdf_tables(page),

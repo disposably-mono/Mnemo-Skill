@@ -13,8 +13,8 @@ import. Preserve essential context while keeping recall atomic.
 One installed command, `mnemo`, with subcommands for each pipeline stage:
 
 ```bash
-mnemo ingest <source> [--ocr] [--extract-images DIR]
-mnemo draft <source> -o cards.csv [--deferred deferred.md]
+mnemo ingest <source> [--ocr] [--lang eng] [--extract-images DIR]
+mnemo draft <source> -o cards.csv [--ocr] [--lang eng] [--deferred deferred.md]
 mnemo audit cards.csv
 mnemo import cards.csv --deck DECK [--config config.toml] [--apkg-out deck.apkg]
 mnemo export-note-types [--config config.toml]
@@ -23,6 +23,12 @@ mnemo export-note-types [--config config.toml]
 Supported source formats: Markdown/plain text (`.md`, `.txt`), PDF, PPTX,
 DOCX. Web pages are ingested by URL through `mnemo.ingest.web.ingest_web()`
 rather than through `mnemo ingest` (no file path).
+
+`--lang` is a Tesseract language code, default `eng`. Use `fil` for
+Filipino/Tagalog (Tesseract's code is `fil`, not `tgl`), or `eng+fil` for
+scanned pages mixing English and Filipino text. Only affects `--ocr`.
+Requires the matching `tesseract-langpack-<code>` installed on the system
+(e.g. `sudo dnf install tesseract tesseract-langpack-fil` on Fedora).
 
 ## Workflow
 
@@ -37,9 +43,10 @@ treat the generated CSV as a finished deck.
 2. **Ingest (deterministic).** MD/text is read directly. For PDF/PPTX/DOCX,
    `mnemo ingest <source>` prints normalized chunks with provenance
    (`file.pdf p.4`, `deck.pptx slide 3`, `file.docx`). PDF image-only pages
-   are surfaced as a visible marker instead of being dropped; add `--ocr` to
-   recover their text through Tesseract when available (tagged `(OCR)` in
-   provenance as lower confidence). Detected PDF tables are re-emitted as
+   are surfaced as a visible marker instead of being dropped; add `--ocr`
+   (and `--lang` for non-English scans) to recover their text through
+   Tesseract when available (tagged `(OCR)` in provenance as lower
+   confidence). Detected PDF tables are re-emitted as
    `header | value` rows; PPTX charts are re-emitted as category/series/value
    tables. Add `--extract-images DIR` to save qualifying source visuals.
 

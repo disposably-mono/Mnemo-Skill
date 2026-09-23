@@ -49,10 +49,17 @@ def _vector_page_marker() -> str:
     )
 
 
-def _ocr_page_text(page) -> str:
-    """Best-effort OCR of a single page; empty string when OCR is unavailable."""
+def _ocr_page_text(page, *, language: str = "eng") -> str:
+    """Best-effort OCR of a single page; empty string when OCR is unavailable.
+
+    ``language`` is a Tesseract language code (or "+"-joined codes, e.g.
+    "eng+fil" for mixed English/Filipino text -- Tesseract's code for
+    Filipino/Tagalog is "fil", not "tgl"). Requires the matching
+    tesseract-langpack-<code> installed and findable via TESSDATA_PREFIX or
+    the system tesseract install.
+    """
     try:
-        textpage = page.get_textpage_ocr(full=True)
+        textpage = page.get_textpage_ocr(full=True, language=language)
         return page.get_text(textpage=textpage).strip()
     except Exception:
         _logger.debug("OCR failed for page; falling back to no OCR text", exc_info=True)
@@ -213,6 +220,7 @@ def ingest_pdf(
     *,
     ocr: bool = False,
     extract_images: Path | None = None,
+    language: str = "eng",
 ) -> list[Chunk]:
     """Ingest a PDF: one Chunk per non-blank page, with table/math/figure markers."""
     import fitz  # PyMuPDF
@@ -251,7 +259,7 @@ def ingest_pdf(
             if image_count == 0 and has_drawings:
                 chunks.append(Chunk(text=_vector_page_marker(), source=source))
                 continue
-            ocr_text = _ocr_page_text(page) if ocr else ""
+            ocr_text = _ocr_page_text(page, language=language) if ocr else ""
             if ocr_text:
                 parts = [ocr_text, *figures]
                 chunks.append(Chunk(text="\n".join(parts), source=f"{source} (OCR)"))

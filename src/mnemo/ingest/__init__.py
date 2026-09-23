@@ -27,10 +27,13 @@ def ingest(
     *,
     ocr: bool = False,
     extract_images: Path | None = None,
+    language: str = "eng",
 ) -> list[Chunk]:
     """Parse a source file into normalized text chunks. Dispatch by extension.
 
-    ``ocr`` and ``extract_images`` only affect PDFs.
+    ``ocr``, ``extract_images``, and ``language`` only affect PDFs.
+    ``language`` is a Tesseract language code (or "+"-joined codes, e.g.
+    "eng+fil" for mixed English/Filipino text).
     """
     path = Path(path)
     if not path.exists():
@@ -44,7 +47,7 @@ def ingest(
     if ext == ".pdf":
         from mnemo.ingest.pdf import ingest_pdf
 
-        return ingest_pdf(path, ocr=ocr, extract_images=extract_images)
+        return ingest_pdf(path, ocr=ocr, extract_images=extract_images, language=language)
     if ext == ".pptx":
         from mnemo.ingest.pptx import ingest_pptx
 

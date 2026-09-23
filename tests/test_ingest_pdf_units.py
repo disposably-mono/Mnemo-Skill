@@ -32,6 +32,36 @@ def test_ocr_page_text_returns_empty_when_ocr_unavailable():
     assert _ocr_page_text(_FakePage()) == ""
 
 
+class _LanguageSpyPage:
+    def __init__(self):
+        self.seen_language = None
+
+    def get_textpage_ocr(self, full=True, language="eng"):
+        self.seen_language = language
+        return "textpage"
+
+    def get_text(self, textpage=None):
+        return "recognized text"
+
+
+def test_ocr_page_text_defaults_to_english():
+    page = _LanguageSpyPage()
+    _ocr_page_text(page)
+    assert page.seen_language == "eng"
+
+
+def test_ocr_page_text_passes_through_requested_language():
+    page = _LanguageSpyPage()
+    _ocr_page_text(page, language="fil")
+    assert page.seen_language == "fil"
+
+
+def test_ocr_page_text_supports_combined_language_codes():
+    page = _LanguageSpyPage()
+    _ocr_page_text(page, language="eng+fil")
+    assert page.seen_language == "eng+fil"
+
+
 class _FakeTable:
     def __init__(self, rows, bbox):
         self._rows = rows
@@ -178,7 +208,9 @@ def test_ingest_pdf_ocr_success_path_labels_source(tmp_path, monkeypatch):
     doc.save(str(pdf))
     doc.close()
 
-    monkeypatch.setattr(pdf_module, "_ocr_page_text", lambda page: "recovered text")
+    monkeypatch.setattr(
+        pdf_module, "_ocr_page_text", lambda page, **kwargs: "recovered text"
+    )
 
     chunks = ingest_pdf(pdf, ocr=True)
 

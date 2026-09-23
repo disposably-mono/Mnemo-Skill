@@ -1,10 +1,13 @@
 """The mnemo CLI: one entry point, subcommands for each pipeline stage.
 
-mnemo ingest <source> [--ocr] [--extract-images DIR]
-mnemo draft <source> -o cards.csv [--deferred deferred.md]
+mnemo ingest <source> [--ocr] [--lang eng] [--extract-images DIR]
+mnemo draft <source> -o cards.csv [--ocr] [--lang eng] [--deferred deferred.md]
 mnemo audit cards.csv
 mnemo import cards.csv --deck DECK [--config config.toml] [--apkg-out deck.apkg]
 mnemo export-note-types [--config config.toml]
+
+--lang is a Tesseract language code (default "eng"); use "fil" for Filipino/
+Tagalog, or "eng+fil" for mixed-language scanned PDFs. Only affects --ocr.
 """
 
 from __future__ import annotations
@@ -23,16 +26,29 @@ from mnemo.draft import draft_cards, write_deferred
 from mnemo.ingest import ingest
 
 
-def cmd_ingest(source: str | Path, *, ocr: bool = False, extract_images: Path | None = None) -> int:
-    for chunk in ingest(source, ocr=ocr, extract_images=extract_images):
+def cmd_ingest(
+    source: str | Path,
+    *,
+    ocr: bool = False,
+    extract_images: Path | None = None,
+    language: str = "eng",
+) -> int:
+    for chunk in ingest(source, ocr=ocr, extract_images=extract_images, language=language):
         print(f"--- {chunk.source} ---")
         print(chunk.text)
         print()
     return 0
 
 
-def cmd_draft(source: str | Path, cards_out: Path, deferred_out: Path | None = None) -> int:
-    chunks = ingest(source)
+def cmd_draft(
+    source: str | Path,
+    cards_out: Path,
+    deferred_out: Path | None = None,
+    *,
+    ocr: bool = False,
+    language: str = "eng",
+) -> int:
+    chunks = ingest(source, ocr=ocr, language=language)
     cards, deferred = draft_cards(chunks)
     write_cards(cards_out, cards)
     # Named after cards_out's stem (not a fixed "deferred.md") so drafting
@@ -127,12 +143,15 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser = subparsers.add_parser("ingest", help="Normalize a source into text chunks.")
     ingest_parser.add_argument("source", type=Path)
     ingest_parser.add_argument("--ocr", action="store_true")
+    ingest_parser.add_argument("--lang", default="eng", dest="language")
     ingest_parser.add_argument("--extract-images", type=Path, metavar="DIR")
 
     draft_parser = subparsers.add_parser("draft", help="Draft cards from a source.")
     draft_parser.add_argument("source", type=Path)
     draft_parser.add_argument("--output", "-o", type=Path, required=True, dest="cards_out")
     draft_parser.add_argument("--deferred", type=Path, default=None)
+    draft_parser.add_argument("--ocr", action="store_true")
+    draft_parser.add_argument("--lang", default="eng", dest="language")
 
     audit_parser = subparsers.add_parser("audit", help="Audit a cards CSV against the rubric.")
     audit_parser.add_argument("cards_csv", type=Path)
@@ -165,9 +184,15 @@ def main(argv: list[str] | None = None) -> int:
 
 def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "ingest":
-        return cmd_ingest(args.source, ocr=args.ocr, extract_images=args.extract_images)
+        return cmd_ingest(
+            args.source, ocr=args.ocr, extract_images=args.extract_images,
+            language=args.language,
+        )
     if args.command == "draft":
-        return cmd_draft(args.source, args.cards_out, args.deferred)
+        return cmd_draft(
+            args.source, args.cards_out, args.deferred,
+            ocr=args.ocr, language=args.language,
+        )
     if args.command == "audit":
         return cmd_audit(args.cards_csv)
     if args.command == "import":

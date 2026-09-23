@@ -48,6 +48,27 @@ class NoteType:
 
 
 MONO_CSS = """\
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('_dmserifdisplay-regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('_dmmono-regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('_dmmono-medium.ttf');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Outfit';
+  src: url('_outfit-variable.ttf');
+  font-weight: 100 900;
+}
+
 .card {
   --bg: #EAF0CE;
   --text-primary: #34312D;
@@ -56,7 +77,10 @@ MONO_CSS = """\
   --accent: #3B6D11;
   --highlight: #534AB7;
   --border: rgba(52, 49, 45, 0.10);
-  font-family: system-ui, sans-serif;
+  --font-serif: 'DM Serif Display', Georgia, serif;
+  --font-sans: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--font-sans);
   font-size: 19px;
   line-height: 1.7;
   color: var(--text-primary);
@@ -76,6 +100,7 @@ MONO_CSS = """\
   --border: rgba(234, 240, 206, 0.08);
 }
 .mono-label {
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.14em;
@@ -83,12 +108,13 @@ MONO_CSS = """\
   color: var(--accent);
   margin-bottom: 10px;
 }
-.mono-q { font-size: 30px; line-height: 1.15; color: var(--text-primary); }
+.mono-q { font-family: var(--font-serif); font-size: 30px; line-height: 1.15; color: var(--text-primary); }
 .mono-a { margin-top: 4px; }
 .cloze { font-weight: 500; color: var(--accent); }
 hr#answer { border: none; border-top: 0.5px solid var(--border); margin: 22px 0; }
-.source { margin-top: 18px; font-size: 10px; letter-spacing: 0.12em; color: var(--text-muted); }
+.source { margin-top: 18px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--text-muted); }
 .mono-hints { margin-top: 18px; }
+#typeans { font-family: var(--font-mono); }
 """
 
 _SOURCE_BLOCK = '{{#Source}}<div class="source">{{Source}}</div>{{/Source}}'
@@ -175,3 +201,90 @@ MONO_TYPE = NoteType(
 MONO_NOTE_TYPES: dict[str, NoteType] = {
     nt.name: nt for nt in (MONO_BASIC, MONO_CLOZE, MONO_OVERLAPPING, MONO_TYPE)
 }
+
+# Mirrors mnemo.config.DEFAULT_CARD_TARGETS, kept local so note_types.py has
+# no dependency on config.py (data ownership stays one-directional).
+_CARD_TYPE_TARGETS = {
+    "qa": "MONO Basic",
+    "cloze": "MONO Cloze",
+    "list": "MONO Overlapping",
+    "typed": "MONO Type",
+    "reverse": "MONO Basic",
+    "image-supported": "MONO Basic",
+}
+
+
+def note_type_for(card_type: str) -> NoteType:
+    """Look up the default NoteType a given card_type renders into."""
+    return MONO_NOTE_TYPES[_CARD_TYPE_TARGETS[card_type]]
+
+
+class RenderError(ValueError):
+    """Raised when a Card cannot be safely rendered into a note type's fields."""
+
+
+def render_fields(card, note_type: NoteType) -> dict[str, str]:
+    """Render a mnemo.card.Card into this note type's exact field set.
+
+    Extra/Mnemonic are CSV-contract fields for human/agent authoring
+    convenience; note types without their own Extra field (Basic,
+    Overlapping) fold that text into their primary answer field instead of
+    silently dropping it. Dispatches on identity (not name) so a caller
+    can't accidentally route through a same-named but differently-shaped
+    NoteType.
+    """
+    if note_type is MONO_BASIC:
+        return _basic_fields(card)
+    if note_type is MONO_CLOZE:
+        return _cloze_fields(card)
+    if note_type is MONO_OVERLAPPING:
+        return _overlapping_fields(card)
+    if note_type is MONO_TYPE:
+        return _type_fields(card)
+    raise ValueError(f"no field renderer for note type {note_type.name!r}")
+
+
+def _extra_text(card) -> str:
+    parts = [card.extra.strip()] if card.extra.strip() else []
+    if card.mnemonic.strip():
+        parts.append(f"Mnemonic: {card.mnemonic.strip()}")
+    return "\n\n".join(parts)
+
+
+def _common_fields(card) -> dict[str, str]:
+    return {
+        "Source": card.source or "",
+        "CardID": card.card_id or "",
+        "RevisionHash": "",
+    }
+
+
+def _basic_fields(card) -> dict[str, str]:
+    extra = _extra_text(card)
+    back = f"{card.back}\n\n{extra}" if extra else card.back
+    return {"Front": card.front, "Back": back, **_common_fields(card)}
+
+
+def _cloze_fields(card) -> dict[str, str]:
+    return {"Text": card.front, "Extra": _extra_text(card), **_common_fields(card)}
+
+
+def _type_fields(card) -> dict[str, str]:
+    return {
+        "Prompt": card.front, "Answer": card.back, "Extra": _extra_text(card),
+        **_common_fields(card),
+    }
+
+
+def _overlapping_fields(card) -> dict[str, str]:
+    raw_items = [item.strip() for item in card.back.split(";") if item.strip()]
+    if not raw_items:
+        raise RenderError(
+            f"list card back has no items to cloze: {card.back!r} "
+            "(expected '; '-separated items)"
+        )
+    # Escape literal braces so an item can't inject/break cloze deletion
+    # syntax (e.g. a pasted "{{c1::...}}" from another card).
+    items = [item.replace("{{", "&#123;&#123;").replace("}}", "&#125;&#125;") for item in raw_items]
+    text = ", ".join(f"{{{{c{i}::{item}}}}}" for i, item in enumerate(items, start=1))
+    return {"Title": card.topic or "", "Text": text, **_common_fields(card)}

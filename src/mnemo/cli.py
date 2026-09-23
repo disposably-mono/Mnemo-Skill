@@ -13,6 +13,8 @@ Tagalog, or "eng+fil" for mixed-language scanned PDFs. Only affects --ocr.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -65,8 +67,12 @@ def cmd_draft(
         source, ocr=ocr, language=language, pages=pages, prose_language=prose_language,
     )
     cards, deferred = draft_cards(chunks, directions=directions)
+    context = (deck, str(source), directions, ocr, language, pages, prose_language)
+    context_hash = hashlib.sha256(
+        json.dumps(context, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
     identified_cards = [
-        replace(card, card_id=f"draft-{index:04d}")
+        replace(card, card_id=f"draft-{context_hash}-{index:04d}")
         for index, card in enumerate(cards, start=1)
     ]
     write_deck(cards_out, Deck(name=deck, cards=identified_cards))

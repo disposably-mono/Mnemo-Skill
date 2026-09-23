@@ -225,6 +225,34 @@ def test_draft_both_directions_produces_unique_stable_ids(tmp_path):
     ]
 
 
+def test_draft_ids_distinguish_deck_and_source_contexts(tmp_path):
+    from mnemo.anki.export import _to_genanki_note
+    from mnemo.anki.note_types import MONO_BASIC
+
+    first_source = tmp_path / "first.md"
+    second_source = tmp_path / "second.md"
+    first_source.write_text("Q: What is ATP?\nA: Adenosine triphosphate.\n")
+    second_source.write_text(first_source.read_text())
+    first_path = tmp_path / "first.mnemo.yaml"
+    other_deck_path = tmp_path / "other-deck.mnemo.yaml"
+    other_source_path = tmp_path / "other-source.mnemo.yaml"
+
+    assert cmd_draft(first_source, first_path, deck="Biology") == 0
+    assert cmd_draft(first_source, other_deck_path, deck="Science") == 0
+    assert cmd_draft(second_source, other_source_path, deck="Biology") == 0
+
+    cards = [read_deck(path).cards[0] for path in (
+        first_path, other_deck_path, other_source_path,
+    )]
+    assert len({card.card_id for card in cards}) == 3
+    assert len({_to_genanki_note(card, MONO_BASIC).guid for card in cards}) == 3
+
+    assert cmd_draft(first_source, first_path, deck="Biology") == 0
+    repeated = read_deck(first_path).cards[0]
+    assert repeated.card_id == cards[0].card_id
+    assert _to_genanki_note(repeated, MONO_BASIC).guid == _to_genanki_note(cards[0], MONO_BASIC).guid
+
+
 def test_draft_requires_deck_name(tmp_path):
     source = tmp_path / "notes.md"
     source.write_text("Q: What is ATP?\nA: Adenosine triphosphate.\n")

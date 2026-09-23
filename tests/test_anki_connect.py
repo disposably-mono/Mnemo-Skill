@@ -206,7 +206,10 @@ def test_add_notes_raises_on_result_length_mismatch():
 @responses.activate
 def test_update_note_by_card_id_updates_exact_model_match():
     responses.add(responses.POST, URL, json=_ok([101]))
-    responses.add(responses.POST, URL, json=_ok([{"noteId": 101, "modelName": "MONO Basic"}]))
+    responses.add(responses.POST, URL, json=_ok([{
+        "noteId": 101, "modelName": "MONO Basic",
+        "fields": {"CardID": {"value": "w1m1-001", "order": 3}},
+    }]))
     responses.add(responses.POST, URL, json=_ok(None))
 
     updated = AnkiConnect(url=URL).update_note_by_card_id(
@@ -249,10 +252,27 @@ def test_update_note_by_card_id_rejects_multiple_matches():
 @responses.activate
 def test_update_note_by_card_id_rejects_different_model():
     responses.add(responses.POST, URL, json=_ok([101]))
-    responses.add(responses.POST, URL, json=_ok([{"noteId": 101, "modelName": "MONO Cloze"}]))
+    responses.add(responses.POST, URL, json=_ok([{
+        "noteId": 101, "modelName": "MONO Cloze",
+        "fields": {"CardID": {"value": "w1m1-001", "order": 3}},
+    }]))
 
     with pytest.raises(AnkiConnectError, match="belongs to 'MONO Cloze', expected 'MONO Basic'"):
         AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
+
+    assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_update_note_by_card_id_rejects_single_partial_match():
+    responses.add(responses.POST, URL, json=_ok([101]))
+    responses.add(responses.POST, URL, json=_ok([{
+        "noteId": 101, "modelName": "MONO Basic",
+        "fields": {"CardID": {"value": "w1m1-001-extra", "order": 3}},
+    }]))
+
+    with pytest.raises(AnkiConnectError, match="CardID.*w1m1-001-extra"):
+        AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {"Back": "Answer"})
 
     assert len(responses.calls) == 2
 
@@ -273,7 +293,9 @@ def test_update_note_by_card_id_rejects_malformed_lookup_result(lookup_result):
     [None, [], [{"noteId": 101, "modelName": "MONO Basic"}] * 2,
      [{"noteId": 102, "modelName": "MONO Basic"}],
      [{"noteId": 101}], [{"noteId": 101, "modelName": ""}],
-     [{"noteId": 101, "modelName": 123}]],
+     [{"noteId": 101, "modelName": 123}],
+     [{"noteId": 101, "modelName": "MONO Basic", "fields": {}}],
+     [{"noteId": 101, "modelName": "MONO Basic", "fields": {"CardID": "w1m1-001"}}]],
 )
 @responses.activate
 def test_update_note_by_card_id_rejects_malformed_note_info(info_result):

@@ -254,6 +254,12 @@ class AnkiConnect:
             raise AnkiConnectError(
                 f"CardID {card_id!r} belongs to {info['modelName']!r}, expected {model!r}"
             )
+        actual_card_id = info["fields"]["CardID"]["value"]
+        if actual_card_id != card_id:
+            raise AnkiConnectError(
+                f"CardID {card_id!r} lookup returned note {note_id} "
+                f"with CardID {actual_card_id!r}; refusing to update"
+            )
         self._invoke("updateNoteFields", note={"id": note_id, "fields": fields})
         return True
 
@@ -270,6 +276,10 @@ class AnkiConnect:
             or not info["modelName"]
         ):
             raise AnkiConnectError(f"notesInfo returned invalid note or model data for note {note_id}")
+        fields = info.get("fields")
+        card_id_field = fields.get("CardID") if isinstance(fields, dict) else None
+        if not isinstance(card_id_field, dict) or not isinstance(card_id_field.get("value"), str):
+            raise AnkiConnectError(f"notesInfo returned invalid CardID field for note {note_id}")
         return info
 
     # --- sync --------------------------------------------------------------

@@ -13,7 +13,9 @@ import pytest
 import responses
 
 from mnemo.anki.connect import AddResult, AnkiConnect, AnkiConnectError
-from mnemo.anki.note_types import MONO_BASIC, MONO_NOTE_TYPES
+from mnemo.anki.note_types import (
+    MONO_BASIC, MONO_CLOZE, MONO_NOTE_TYPES, MONO_OVERLAPPING, MONO_TYPE,
+)
 
 URL = "http://localhost:8765"
 
@@ -78,17 +80,39 @@ def test_ensure_note_types_creates_missing_model():
     assert created == ["MONO Basic"]
 
 
+@pytest.mark.parametrize(
+    ("note_type", "old_fields", "added_fields"),
+    [
+        (MONO_BASIC, ("Front", "Back", "Source", "CardID", "RevisionHash"), ("Extra", "Mnemonic")),
+        (MONO_CLOZE, ("Text", "Extra", "Source", "CardID", "RevisionHash"), ("Mnemonic",)),
+        (MONO_TYPE, ("Prompt", "Answer", "Extra", "Source", "CardID", "RevisionHash"), ("Mnemonic",)),
+        (MONO_OVERLAPPING, ("Title", "Text", "Source", "CardID", "RevisionHash"), ("Extra", "Mnemonic")),
+    ],
+)
 @responses.activate
-def test_ensure_note_types_adds_missing_trailing_field_on_existing_model():
-    responses.add(responses.POST, URL, json=_ok(["MONO Basic"]))  # modelNames
-    responses.add(responses.POST, URL, json=_ok(["Front", "Back", "Source", "CardID"]))  # modelFieldNames
-    responses.add(responses.POST, URL, json=_ok(None))  # modelFieldAdd RevisionHash
-    responses.add(responses.POST, URL, json=_ok(None))  # updateModelTemplates
-    responses.add(responses.POST, URL, json=_ok(None))  # updateModelStyling
-    created = AnkiConnect(url=URL).ensure_note_types([MONO_BASIC])
+def test_ensure_note_types_appends_exact_migration_fields_before_templates(
+    note_type, old_fields, added_fields,
+):
+    responses.add(responses.POST, URL, json=_ok([note_type.name]))
+    responses.add(responses.POST, URL, json=_ok(list(old_fields)))
+    for _ in added_fields:
+        responses.add(responses.POST, URL, json=_ok(None))
+    responses.add(responses.POST, URL, json=_ok(None))
+    responses.add(responses.POST, URL, json=_ok(None))
+
+    created = AnkiConnect(url=URL).ensure_note_types([note_type])
+
     assert created == []
-    field_add_call = responses.calls[2].request
-    assert b"RevisionHash" in field_add_call.body
+    sent = [json.loads(call.request.body) for call in responses.calls]
+    assert [request["action"] for request in sent] == [
+        "modelNames", "modelFieldNames",
+        *("modelFieldAdd" for _ in added_fields),
+        "updateModelTemplates", "updateModelStyling",
+    ]
+    assert [request["params"] for request in sent[2:2 + len(added_fields)]] == [
+        {"modelName": note_type.name, "fieldName": field_name}
+        for field_name in added_fields
+    ]
 
 
 @responses.activate
@@ -258,11 +282,16 @@ def test_update_note_by_card_id_returns_false_when_no_note_matches():
 @responses.activate
 def test_update_note_by_card_id_rejects_multiple_matches():
     responses.add(responses.POST, URL, json=_ok([101, 102]))
+    for note_id in (101, 102):
+        responses.add(responses.POST, URL, json=_ok([{
+            "noteId": note_id, "modelName": "MONO Basic",
+            "fields": {"CardID": {"value": "w1m1-001", "order": 3}},
+        }]))
 
     with pytest.raises(AnkiConnectError, match="multiple notes"):
         AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {})
 
-    assert len(responses.calls) == 1
+    assert len(responses.calls) == 3
 
 
 @responses.activate
@@ -280,17 +309,53 @@ def test_update_note_by_card_id_rejects_different_model():
 
 
 @responses.activate
-def test_update_note_by_card_id_rejects_single_partial_match():
+def test_update_note_by_card_id_ignores_single_partial_match():
     responses.add(responses.POST, URL, json=_ok([101]))
     responses.add(responses.POST, URL, json=_ok([{
         "noteId": 101, "modelName": "MONO Basic",
         "fields": {"CardID": {"value": "w1m1-001-extra", "order": 3}},
     }]))
 
-    with pytest.raises(AnkiConnectError, match="CardID.*w1m1-001-extra"):
-        AnkiConnect(url=URL).update_note_by_card_id("w1m1-001", "MONO Basic", {"Back": "Answer"})
+    updated = AnkiConnect(url=URL).update_note_by_card_id(
+        "w1m1-001", "MONO Basic", {"Back": "Answer"},
+    )
 
+    assert updated is False
     assert len(responses.calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("card_id", "query"),
+    [
+        ("with_under", r'CardID:"with\_under"'),
+        ("with*star", r'CardID:"with\*star"'),
+        ('with"quote', r'CardID:"with\"quote"'),
+        (r"with\slash", r'CardID:"with\\slash"'),
+        ("with&ampersand", 'CardID:"with&amp;ampersand"'),
+        ("with<angle>", 'CardID:"with&lt;angle&gt;"'),
+    ],
+)
+@responses.activate
+def test_find_note_by_card_id_escapes_anki_search_syntax(card_id, query):
+    responses.add(responses.POST, URL, json=_ok([]))
+
+    assert AnkiConnect(url=URL).find_note_id_by_card_id(card_id, "MONO Basic") is None
+    assert json.loads(responses.calls[0].request.body)["params"]["query"] == query
+
+
+@responses.activate
+def test_find_note_by_card_id_filters_case_distinct_and_partial_candidates():
+    responses.add(responses.POST, URL, json=_ok([101, 102, 103]))
+    for note_id, value in ((101, "ALPHA"), (102, "alpha-suffix"), (103, "alpha")):
+        responses.add(responses.POST, URL, json=_ok([{
+            "noteId": note_id, "modelName": "MONO Basic",
+            "fields": {"CardID": {"value": value, "order": 3}},
+        }]))
+
+    note_id = AnkiConnect(url=URL).find_note_id_by_card_id("alpha", "MONO Basic")
+
+    assert note_id == 103
+    assert len(responses.calls) == 4
 
 
 @pytest.mark.parametrize("lookup_result", [None, {}, ["101"], [True]])

@@ -29,6 +29,15 @@ directions are `term-to-definition` (default), `definition-to-term`, or
 `both`, selected with `--directions`. Decks use YAML manifests only: CSV input
 and CSV export are intentionally unsupported.
 
+To apply edits to a deck already in Anki while keeping existing note and card
+IDs, use `mnemo import --update-existing module.mnemo.yaml`. This opt-in mode
+matches notes by the exact, case-sensitive `CardID` stored in Anki, updates
+only their fields in place, and adds cards whose IDs have no exact match.
+Ambiguous IDs or a matching note with the wrong note type stop the import
+before any note is written. The regular import remains add-only. If
+AnkiConnect is unavailable, either command exports an offline `.apkg` file;
+the offline export does not update notes in place.
+
 See [SKILL.md](SKILL.md) for the full agent-facing workflow, card contract,
 and generation rules.
 

@@ -24,6 +24,10 @@ from mnemo.config import DEFAULT_URL
 
 API_VERSION = 6
 _TIMEOUT_S = 10
+_SEARCH_ESCAPES = {
+    "\\": r"\\", '"': r'\"', "*": r"\*", "_": r"\_",
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+}
 
 
 class AnkiConnectError(RuntimeError):
@@ -248,25 +252,24 @@ class AnkiConnect:
 
     def find_note_id_by_card_id(self, card_id: str, model: str) -> int | None:
         """Resolve one exact model/CardID match without changing its fields."""
-        note_ids = self._invoke("findNotes", query=f'CardID:"{card_id}"')
+        escaped_card_id = "".join(_SEARCH_ESCAPES.get(char, char) for char in card_id)
+        note_ids = self._invoke("findNotes", query=f'CardID:"{escaped_card_id}"')
         if not isinstance(note_ids, list) or any(type(note_id) is not int for note_id in note_ids):
             raise AnkiConnectError("findNotes returned an invalid CardID match result")
-        if not note_ids:
+        exact_matches = [
+            (note_id, info)
+            for note_id in note_ids
+            if (info := self._note_info(note_id))["fields"]["CardID"]["value"] == card_id
+        ]
+        if not exact_matches:
             return None
-        if len(note_ids) != 1:
+        if len(exact_matches) != 1:
             raise AnkiConnectError(f"CardID {card_id!r} matched multiple notes")
 
-        note_id = note_ids[0]
-        info = self._note_info(note_id)
+        note_id, info = exact_matches[0]
         if info["modelName"] != model:
             raise AnkiConnectError(
                 f"CardID {card_id!r} belongs to {info['modelName']!r}, expected {model!r}"
-            )
-        actual_card_id = info["fields"]["CardID"]["value"]
-        if actual_card_id != card_id:
-            raise AnkiConnectError(
-                f"CardID {card_id!r} lookup returned note {note_id} "
-                f"with CardID {actual_card_id!r}; refusing to update"
             )
         return note_id
 

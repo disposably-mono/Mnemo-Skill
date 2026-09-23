@@ -16,7 +16,7 @@ One installed command, `mnemo`, with subcommands for each pipeline stage:
 mnemo ingest <source> [--ocr] [--lang eng] [--extract-images DIR]
 mnemo draft <source> --deck DECK -o deck.mnemo.yaml [--directions MODE] [--ocr] [--lang eng] [--deferred deferred.md]
 mnemo audit deck.mnemo.yaml
-mnemo import deck.mnemo.yaml [--config config.toml] [--apkg-out deck.apkg]
+mnemo import deck.mnemo.yaml [--config config.toml] [--apkg-out deck.apkg] [--update-existing]
 mnemo export-note-types [--config config.toml]
 ```
 
@@ -106,6 +106,15 @@ treat the generated YAML manifest as a finished deck.
    file you import by hand (File → Import in Anki) when AnkiConnect isn't
    reachable. Skipped cards (usually AnkiConnect-detected duplicates) are
    printed individually — never silently dropped.
+
+   When applying an edited manifest to notes already in Anki, use
+   `mnemo import --update-existing module.mnemo.yaml` after approval. It
+   matches the exact stored `CardID` (including case), updates matched
+   notes' fields in place, and adds cards with unmatched IDs. Ambiguous
+   IDs or a note-type mismatch stop the import before any note is written.
+   The regular import is add-only. If AnkiConnect is unavailable, update
+   mode exports an offline `.apkg` instead; importing that package is not
+   an in-place update.
 
 10. Report generated, authored, deferred, skipped, and imported counts.
 

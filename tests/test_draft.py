@@ -60,6 +60,61 @@ def test_colon_definition_line_is_grounded():
     assert cards[0].back == "The organelle that produces most cellular ATP."
 
 
+def test_definition_line_generates_both_requested_directions():
+    cards, deferred = draft_cards(
+        [Chunk(text="Wika: Isang sistema ng mga simbolo.", source="notes.md")],
+        directions="both",
+    )
+
+    assert deferred == []
+    assert [(card.front, card.back) for card in cards] == [
+        ("What is wika?", "Isang sistema ng mga simbolo."),
+        ("What is the term for Isang sistema ng mga simbolo?", "Wika"),
+    ]
+
+
+def test_definition_line_can_generate_term_to_definition_only():
+    cards, deferred = draft_cards(
+        [Chunk(text="Wika: Isang sistema ng mga simbolo.", source="notes.md")],
+        directions="term-to-definition",
+    )
+
+    assert deferred == []
+    assert [(card.front, card.back) for card in cards] == [
+        ("What is wika?", "Isang sistema ng mga simbolo.")
+    ]
+
+
+def test_definition_line_can_generate_definition_to_term_only():
+    cards, deferred = draft_cards(
+        [Chunk(text="Wika: Isang sistema ng mga simbolo.", source="notes.md")],
+        directions="definition-to-term",
+    )
+
+    assert deferred == []
+    assert [(card.front, card.back) for card in cards] == [
+        ("What is the term for Isang sistema ng mga simbolo?", "Wika")
+    ]
+
+
+def test_qa_input_is_not_reversed_when_both_directions_are_requested():
+    cards, _ = draft_cards(
+        [Chunk(text="Q: What is ATP?\nA: Adenosine triphosphate.", source="notes.md")],
+        directions="both",
+    )
+
+    assert [(card.front, card.back) for card in cards] == [
+        ("What is ATP?", "Adenosine triphosphate.")
+    ]
+
+
+def test_draft_cards_rejects_unknown_direction():
+    import pytest
+
+    with pytest.raises(ValueError, match="directions"):
+        draft_cards([], directions="reverse")
+
+
 def test_stem_with_bullets_is_grounded_as_list():
     text = "Organelles in a cell:\n- mitochondrion\n- nucleus\n- ribosome\n"
     cards, deferred = draft_cards([Chunk(text=text, source="notes.md")])

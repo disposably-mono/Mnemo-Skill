@@ -44,6 +44,7 @@ _NON_DEFINITION_TERMS = {
 # A stem line plus at least two bullets is the minimum bar for "confident"
 # list grounding (a single-item list isn't a meaningful enumeration).
 _MIN_STEM_BULLET_LINES = 3
+_DIRECTIONS = {"term-to-definition", "definition-to-term", "both"}
 
 
 @dataclass
@@ -56,9 +57,13 @@ class DeferredUnit:
 
 
 def draft_cards(
-    chunks: list[Chunk], *, deck: str = ""
+    chunks: list[Chunk], *, deck: str = "", directions: str = "term-to-definition"
 ) -> tuple[list[Card], list[DeferredUnit]]:
     """Draft cards from ingested Chunks, deferring anything not confidently grounded."""
+    if directions not in _DIRECTIONS:
+        raise ValueError(
+            "directions must be 'term-to-definition', 'definition-to-term', or 'both'"
+        )
     cards: list[Card] = []
     deferred: list[DeferredUnit] = []
     for chunk in chunks:
@@ -72,14 +77,16 @@ def draft_cards(
             # validation (e.g. front too long) -- that must defer the block,
             # not crash the whole draft run and lose every other card in it.
             try:
-                card = _ground_block(block, topic=topic, source=chunk.source)
+                card = _ground_block(
+                    block, topic=topic, source=chunk.source, directions=directions
+                )
             except CardValidationError as exc:
                 card = None
                 reason = f"matched a grounding pattern but failed validation: {exc}"
             else:
                 reason = "no confident grounding pattern matched"
             if card is not None:
-                cards.append(card)
+                cards.extend(card if isinstance(card, list) else [card])
             else:
                 deferred.append(
                     DeferredUnit(
@@ -132,13 +139,17 @@ def _extract_topic(block: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def _ground_block(block: str, *, topic: str | None, source: str) -> Card | None:
+def _ground_block(
+    block: str, *, topic: str | None, source: str, directions: str
+) -> Card | list[Card] | None:
     for grounder in (_ground_qa_block, _ground_double_colon, _ground_tab_pair,
-                      _ground_stem_bullets, _ground_definition_line):
+                     _ground_stem_bullets):
         card = grounder(block, topic=topic, source=source)
         if card is not None:
             return card
-    return None
+    return _ground_definition_line(
+        block, topic=topic, source=source, directions=directions
+    )
 
 
 def _ground_qa_block(block: str, *, topic: str | None, source: str) -> Card | None:
@@ -186,7 +197,9 @@ def _ground_tab_pair(block: str, *, topic: str | None, source: str) -> Card | No
     return Card(front=parts[0], back=parts[1], card_type="qa", topic=topic, source=source)
 
 
-def _ground_definition_line(block: str, *, topic: str | None, source: str) -> Card | None:
+def _ground_definition_line(
+    block: str, *, topic: str | None, source: str, directions: str
+) -> Card | list[Card] | None:
     if "\n" in block:
         return None
     match = _DEFINITION_LINE.match(block)
@@ -198,13 +211,25 @@ def _ground_definition_line(block: str, *, topic: str | None, source: str) -> Ca
         return None
     if not _looks_like_a_definable_term(term):
         return None
-    return Card(
+    term_to_definition = Card(
         front=f"What is {_lower_first(term)}?",
         back=_capitalize_first(definition),
         card_type="qa",
         topic=topic,
         source=source,
     )
+    definition_to_term = Card(
+        front=f"What is the term for {definition.rstrip('.!?')}?",
+        back=term,
+        card_type="qa",
+        topic=topic,
+        source=source,
+    )
+    if directions == "term-to-definition":
+        return term_to_definition
+    if directions == "definition-to-term":
+        return definition_to_term
+    return [term_to_definition, definition_to_term]
 
 
 def _looks_like_a_definable_term(term: str) -> bool:

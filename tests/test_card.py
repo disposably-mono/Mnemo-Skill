@@ -1,90 +1,22 @@
-"""Tests for the Card CSV contract (mnemo/card.py).
-
-Card is the intermediate format shared by draft -> author -> audit -> import.
-Required fields per SKILL.md: Front, Back, Extra, Mnemonic, CardType, Tags,
-plus Image/Topic/Source/CardID/Confidence for traceability and validation.
-"""
+"""Validation tests for the Card domain object."""
 
 import pytest
 
-from mnemo.card import (
-    Card,
-    CardValidationError,
-    CARD_TYPES,
-    read_cards,
-    write_cards,
-)
+from mnemo.card import CARD_TYPES, Card, CardValidationError
 
 
 def make_card(**overrides):
-    fields = dict(
-        front="What organelle produces most cellular ATP?",
-        back="The mitochondrion.",
-        extra="Explanation: oxidative phosphorylation occurs there.",
-        mnemonic="",
-        card_type="qa",
-        tags=["biology", "cell-respiration"],
-    )
-    fields.update(overrides)
-    return Card(**fields)
+    return Card(**({"front": "What produces ATP?", "back": "Mitochondria."} | overrides))
 
 
-def test_card_types_match_skill_contract():
+def test_card_types_match_supported_values():
     assert CARD_TYPES == ("qa", "cloze", "reverse", "typed", "list", "image-supported")
 
 
-def test_valid_card_round_trips_through_csv(tmp_path):
-    card = make_card()
-    csv_path = tmp_path / "cards.csv"
-    write_cards(csv_path, [card])
-    loaded = read_cards(csv_path)
-    assert loaded == [card]
-
-
-def test_write_then_read_preserves_optional_fields(tmp_path):
-    card = make_card(
-        image="mitochondrion.png",
-        topic="Cell Biology",
-        source="module01.md#L12",
-        card_id="c-0001",
-        confidence=0.92,
-    )
-    csv_path = tmp_path / "cards.csv"
-    write_cards(csv_path, [card])
-    loaded = read_cards(csv_path)
-    assert loaded == [card]
-    assert loaded[0].confidence == pytest.approx(0.92)
-
-
-def test_missing_optional_fields_default_sensibly(tmp_path):
-    csv_path = tmp_path / "cards.csv"
-    write_cards(csv_path, [make_card()])
-    loaded = read_cards(csv_path)
-    assert loaded[0].image is None
-    assert loaded[0].topic is None
-    assert loaded[0].source is None
-    assert loaded[0].card_id is None
-    assert loaded[0].confidence is None
-
-
-def test_tags_round_trip_as_space_separated(tmp_path):
-    card = make_card(tags=["biology", "cell-respiration", "atp"])
-    csv_path = tmp_path / "cards.csv"
-    write_cards(csv_path, [card])
-    text = csv_path.read_text()
-    assert "biology cell-respiration atp" in text
-    loaded = read_cards(csv_path)
-    assert loaded[0].tags == ["biology", "cell-respiration", "atp"]
-
-
-def test_empty_front_is_rejected():
-    with pytest.raises(CardValidationError, match="front"):
-        make_card(front="")
-
-
-def test_empty_back_is_rejected():
-    with pytest.raises(CardValidationError, match="back"):
-        make_card(back="   ")
+@pytest.mark.parametrize("field,value", [("front", ""), ("back", "   "), ("front", 5)])
+def test_required_text_is_validated(field, value):
+    with pytest.raises(CardValidationError, match=field):
+        make_card(**{field: value})
 
 
 def test_unknown_card_type_is_rejected():
@@ -93,50 +25,39 @@ def test_unknown_card_type_is_rejected():
 
 
 def test_front_over_150_characters_is_rejected():
-    long_front = "a" * 151
     with pytest.raises(CardValidationError, match="150 characters"):
-        make_card(front=long_front)
+        make_card(front="a" * 151)
 
 
 def test_front_of_exactly_150_characters_is_accepted():
-    front150 = "a" * 150
-    card = make_card(front=front150)
-    assert card.front == front150
+    assert make_card(front="a" * 150).front == "a" * 150
 
 
 def test_particle_heavy_tagalog_front_within_char_limit_is_accepted():
-    # 23 words but under 150 characters -- word count alone would have
-    # rejected this real single-clause Tagalog front.
     front = (
         "Ang ginagamit sa pagtuturo sa pag-aaral sa mga eskuwelahan at ang "
         "wika sa pagsulat ng mga aklat at kagamitan sa pagtuturo sa silid-aralan"
     )
     assert len(front.split()) == 23
-    card = make_card(front=front)
-    assert card.front == front
+    assert make_card(front=front).front == front
 
 
-def test_tag_containing_whitespace_is_rejected():
+@pytest.mark.parametrize("tags", [["two words"], [3], "biology"])
+def test_invalid_tags_are_rejected(tags):
     with pytest.raises(CardValidationError, match="tag"):
-        make_card(tags=["two words"])
+        make_card(tags=tags)
 
 
-def test_confidence_out_of_range_is_rejected():
+@pytest.mark.parametrize("confidence", [-0.01, 1.01, True, "0.5"])
+def test_invalid_confidence_is_rejected(confidence):
     with pytest.raises(CardValidationError, match="confidence"):
-        make_card(confidence=1.5)
+        make_card(confidence=confidence)
 
 
-def test_read_cards_missing_file_raises(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        read_cards(tmp_path / "absent.csv")
-
-
-def test_read_cards_on_empty_file_returns_empty_list(tmp_path):
-    csv_path = tmp_path / "cards.csv"
-    write_cards(csv_path, [])
-    assert read_cards(csv_path) == []
+def test_confidence_bounds_are_accepted():
+    assert make_card(confidence=0).confidence == 0
+    assert make_card(confidence=1).confidence == 1
 
 
 def test_cloze_card_type_is_accepted():
-    card = make_card(card_type="cloze", front="{{c1::mitochondrion}} produces ATP.")
-    assert card.card_type == "cloze"
+    assert make_card(card_type="cloze", front="{{c1::mitochondrion}} produces ATP.").card_type == "cloze"

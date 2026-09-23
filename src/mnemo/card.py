@@ -1,17 +1,8 @@
-"""The Card CSV contract: the intermediate format between every pipeline stage.
-
-Per SKILL.md's Required Card Contract, a card carries the six required Anki
-fields (Front, Back, Extra, Mnemonic, CardType, Tags) plus optional
-traceability fields (Image, Topic, Source, CardID, Confidence). The
-deterministic drafter emits cards, the agent authors/rewrites them in place,
-the audit rubric validates them, and the importer reads the same CSV.
-"""
+"""Validated flashcard values shared by drafting, auditing, and importing."""
 
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass, field
-from pathlib import Path
 
 CARD_TYPES: tuple[str, ...] = (
     "qa",
@@ -29,19 +20,6 @@ CARD_TYPES: tuple[str, ...] = (
 # 150 chars comfortably fits a real single-clause Tagalog front while still
 # forcing genuine splitting of multi-clause prose (which runs 300+ chars).
 _MAX_FRONT_CHARS = 150
-_FIELDNAMES = (
-    "Front",
-    "Back",
-    "Extra",
-    "Mnemonic",
-    "CardType",
-    "Tags",
-    "Image",
-    "Topic",
-    "Source",
-    "CardID",
-    "Confidence",
-)
 
 
 class CardValidationError(ValueError):
@@ -69,70 +47,29 @@ class Card:
 
 
 def _validate_card(card: Card) -> None:
-    if not card.front.strip():
+    if not isinstance(card.front, str) or not card.front.strip():
         raise CardValidationError("front must be a non-empty string")
-    if not card.back.strip():
+    if not isinstance(card.back, str) or not card.back.strip():
         raise CardValidationError("back must be a non-empty string")
+    for name in ("extra", "mnemonic"):
+        if not isinstance(getattr(card, name), str):
+            raise CardValidationError(f"{name} must be a string")
     if card.card_type not in CARD_TYPES:
         raise CardValidationError(f"card_type must be one of {CARD_TYPES}")
+    for name in ("image", "topic", "source", "card_id"):
+        value = getattr(card, name)
+        if value is not None and not isinstance(value, str):
+            raise CardValidationError(f"{name} must be a string or null")
     if len(card.front) > _MAX_FRONT_CHARS:
         raise CardValidationError(f"front must be at most {_MAX_FRONT_CHARS} characters")
+    if not isinstance(card.tags, list):
+        raise CardValidationError("tags must be a list")
     for tag in card.tags:
-        if not tag or any(char.isspace() for char in tag):
+        if not isinstance(tag, str) or not tag or any(char.isspace() for char in tag):
             raise CardValidationError(f"tag {tag!r} must be a single non-empty word")
-    if card.confidence is not None and not (0.0 <= card.confidence <= 1.0):
+    if card.confidence is not None and (
+        isinstance(card.confidence, bool)
+        or not isinstance(card.confidence, (int, float))
+        or not (0.0 <= card.confidence <= 1.0)
+    ):
         raise CardValidationError("confidence must be between 0.0 and 1.0")
-
-
-def write_cards(path: str | Path, cards: list[Card]) -> None:
-    """Write cards to a CSV file, creating parent directories as needed."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=_FIELDNAMES)
-        writer.writeheader()
-        for card in cards:
-            writer.writerow(_card_to_row(card))
-
-
-def read_cards(path: str | Path) -> list[Card]:
-    """Read cards from a CSV file previously written by write_cards()."""
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(path)
-    with path.open("r", newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        return [_row_to_card(row) for row in reader]
-
-
-def _card_to_row(card: Card) -> dict[str, str]:
-    return {
-        "Front": card.front,
-        "Back": card.back,
-        "Extra": card.extra,
-        "Mnemonic": card.mnemonic,
-        "CardType": card.card_type,
-        "Tags": " ".join(card.tags),
-        "Image": card.image or "",
-        "Topic": card.topic or "",
-        "Source": card.source or "",
-        "CardID": card.card_id or "",
-        "Confidence": "" if card.confidence is None else str(card.confidence),
-    }
-
-
-def _row_to_card(row: dict[str, str]) -> Card:
-    confidence = row.get("Confidence") or ""
-    return Card(
-        front=row["Front"],
-        back=row["Back"],
-        extra=row.get("Extra", ""),
-        mnemonic=row.get("Mnemonic", ""),
-        card_type=row.get("CardType", "qa"),
-        tags=(row.get("Tags") or "").split(),
-        image=row.get("Image") or None,
-        topic=row.get("Topic") or None,
-        source=row.get("Source") or None,
-        card_id=row.get("CardID") or None,
-        confidence=float(confidence) if confidence else None,
-    )

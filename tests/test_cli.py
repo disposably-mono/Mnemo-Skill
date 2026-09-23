@@ -134,6 +134,90 @@ def test_cmd_import_uses_ankiconnect_when_available(tmp_path):
     added = next(req for req in requests_sent if req["action"] == "addNotes")
     assert added["params"]["notes"][0]["deckName"] == "Mnemo::Biology"
     assert added["params"]["notes"][0]["tags"] == ["science"]
+    assert "findNotes" not in [req["action"] for req in requests_sent]
+
+
+def test_import_parser_accepts_update_existing_flag():
+    args = build_parser().parse_args(["import", "deck.mnemo.yaml", "--update-existing"])
+    assert args.update_existing is True
+
+
+@responses.activate
+@pytest.mark.parametrize("include_unmatched", [False, True])
+def test_import_update_existing_updates_exact_match_and_adds_unmatched(
+    tmp_path, capsys, include_unmatched,
+):
+    cards = [
+        Card(front="What is ATP?", back="New answer", extra="New explanation",
+             mnemonic="New memory cue", card_id="atp"),
+    ]
+    if include_unmatched:
+        cards = [*cards, Card(front="What is DNA?", back="New DNA answer", card_id="dna")]
+    path = write_test_deck(tmp_path, cards=cards)
+
+    def callback(request):
+        body = json.loads(request.body)
+        if body["action"] == "updateNoteFields":
+            return (200, {}, json.dumps(_ok(None)))
+        if body["action"] == "findNotes":
+            return (200, {}, json.dumps(_ok([900] if body["params"]["query"] == 'CardID:"atp"' else [])))
+        if body["action"] == "notesInfo" and body["params"]["notes"] == [900]:
+            return (200, {}, json.dumps(_ok([{
+                "noteId": 900, "modelName": "MONO Basic",
+                "fields": {"CardID": {"value": "atp", "order": 0}}, "cards": [901],
+            }])))
+        return _dispatching_ankiconnect_callback(request)
+
+    responses.add_callback(responses.POST, URL, callback=callback)
+    assert main(["import", str(path), "--update-existing"]) == 0
+
+    sent = [json.loads(call.request.body) for call in responses.calls]
+    updates = [request for request in sent if request["action"] == "updateNoteFields"]
+    assert len(updates) == 1
+    assert updates[0]["params"]["note"]["id"] == 900
+    assert updates[0]["params"]["note"]["fields"]["Back"] == "New answer"
+    assert updates[0]["params"]["note"]["fields"]["Extra"] == "New explanation"
+    assert updates[0]["params"]["note"]["fields"]["Mnemonic"] == "New memory cue"
+    added = [request for request in sent if request["action"] == "addNotes"]
+    if include_unmatched:
+        assert len(added) == 1
+        assert [note["fields"]["CardID"] for note in added[0]["params"]["notes"]] == ["dna"]
+    else:
+        assert added == []
+    expected_added = 1 if include_unmatched else 0
+    assert f"{expected_added} added, 1 updated, 0 skipped" in capsys.readouterr().out
+
+
+@responses.activate
+def test_import_update_existing_rejects_missing_card_id_before_ankiconnect():
+    from mnemo.anki.connect import AnkiConnect
+    from mnemo.cli import _import_via_ankiconnect
+    from mnemo.config import load_config
+
+    cards = [
+        Card(front="What is ATP?", back="Answer", card_id="atp"),
+        Card(front="What is DNA?", back="Answer", card_id=None),
+    ]
+    responses.add_callback(responses.POST, URL, callback=_dispatching_ankiconnect_callback)
+
+    with pytest.raises(ValueError, match="CardID"):
+        _import_via_ankiconnect(cards, "Biology", load_config(None), AnkiConnect(url=URL),
+                                update_existing=True)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_import_update_existing_falls_back_to_apkg_without_updating(tmp_path, capsys):
+    import requests
+
+    path = write_test_deck(tmp_path)
+    output = tmp_path / "fallback.apkg"
+    responses.add(responses.POST, URL, body=requests.exceptions.ConnectionError("refused"))
+
+    assert main(["import", str(path), "--update-existing", "--apkg-out", str(output)]) == 0
+    assert output.exists()
+    assert "exported 1 card(s)" in capsys.readouterr().out
+    assert [json.loads(call.request.body)["action"] for call in responses.calls] == ["version"]
 
 
 @responses.activate

@@ -3,7 +3,7 @@
 mnemo ingest <source> [--ocr] [--lang eng] [--extract-images DIR]
 mnemo draft <source> --deck DECK -o deck.mnemo.yaml [--directions MODE]
 mnemo audit deck.mnemo.yaml
-mnemo import deck.mnemo.yaml [--config config.toml] [--apkg-out deck.apkg]
+mnemo import deck.mnemo.yaml [--config config.toml] [--apkg-out deck.apkg] [--update-existing]
 mnemo export-note-types [--config config.toml]
 
 --lang is a Tesseract language code (default "eng"); use "fil" for Filipino/
@@ -98,7 +98,8 @@ def cmd_audit(deck_path: Path) -> int:
 
 
 def cmd_import(
-    deck_path: Path, *, config_path: Path | None, apkg_out: Path | None
+    deck_path: Path, *, config_path: Path | None, apkg_out: Path | None,
+    update_existing: bool = False,
 ) -> int:
     _require_deck_manifest_path(deck_path)
     config = load_config(config_path)
@@ -106,7 +107,9 @@ def cmd_import(
     cards = cards_for_import(deck)
     ankiconnect = AnkiConnect(url=config.ankiconnect_url)
     if ankiconnect.is_available():
-        return _import_via_ankiconnect(cards, deck.name, config, ankiconnect)
+        return _import_via_ankiconnect(
+            cards, deck.name, config, ankiconnect, update_existing=update_existing,
+        )
     default_apkg = deck_path.with_name(deck_path.name.removesuffix(".mnemo.yaml") + ".apkg")
     return _import_via_apkg(cards, deck.name, apkg_out or default_apkg)
 
@@ -117,8 +120,11 @@ def _require_deck_manifest_path(path: Path) -> None:
 
 
 def _import_via_ankiconnect(
-    cards: list[Card], deck: str, config: Config, ankiconnect: AnkiConnect
+    cards: list[Card], deck: str, config: Config, ankiconnect: AnkiConnect,
+    *, update_existing: bool = False,
 ) -> int:
+    if update_existing and any(not card.card_id or not card.card_id.strip() for card in cards):
+        raise ValueError("--update-existing requires a non-empty CardID for every card")
     ankiconnect.ensure_deck(deck)
     ankiconnect.ensure_note_types(MONO_NOTE_TYPES.values())
     by_model: dict[str, list[Card]] = {}
@@ -126,13 +132,23 @@ def _import_via_ankiconnect(
         model = note_type_for(card.card_type).name
         by_model.setdefault(model, []).append(card)
     total_added = 0
+    total_updated = 0
     skipped_cards: list[Card] = []
     for model, model_cards in by_model.items():
         note_type = MONO_NOTE_TYPES[model]
-        fields_list = [render_fields(card, note_type) for card in model_cards]
-        tags_list = [card.tags for card in model_cards]
+        rendered = [(card, render_fields(card, note_type)) for card in model_cards]
+        to_add = [
+            (card, fields) for card, fields in rendered
+            if not update_existing or not ankiconnect.update_note_by_card_id(
+                card.card_id, model, fields,
+            )
+        ]
+        total_updated += len(rendered) - len(to_add)
+        if not to_add:
+            continue
         result = ankiconnect.add_notes(
-            deck=deck, model=model, fields_list=fields_list, tags_list=tags_list,
+            deck=deck, model=model, fields_list=[fields for _, fields in to_add],
+            tags_list=[card.tags for card, _ in to_add],
         )
         total_added += len(result.added)
         # Skipped cards must stay identifiable, not just counted -- the
@@ -140,14 +156,14 @@ def _import_via_ankiconnect(
         # needs to know *which* card AnkiConnect refused (usually a
         # duplicate) to review it.
         skipped_cards.extend(
-            card for card, nid in zip(model_cards, result.results) if nid is None
+            card for (card, _), nid in zip(to_add, result.results) if nid is None
         )
     if config.sync_after_import:
         ankiconnect.sync()
-    print(
-        f"Imported via AnkiConnect: {total_added} added, "
-        f"{len(skipped_cards)} skipped -> {deck}"
-    )
+    counts = f"{total_added} added, "
+    if update_existing:
+        counts += f"{total_updated} updated, "
+    print(f"Imported via AnkiConnect: {counts}{len(skipped_cards)} skipped -> {deck}")
     for card in skipped_cards:
         print(f"  SKIPPED (likely duplicate): {card.front!r} [{card.source or 'no source'}]")
     return 0
@@ -225,6 +241,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("deck_path", type=Path, metavar="DECK.mnemo.yaml")
     import_parser.add_argument("--config", type=Path, default=None, dest="config_path")
     import_parser.add_argument("--apkg-out", type=Path, default=None)
+    import_parser.add_argument("--update-existing", action="store_true")
 
     export_nt_parser = subparsers.add_parser(
         "export-note-types", help="Install/update the MONO note types in Anki."
@@ -264,6 +281,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "import":
         return cmd_import(
             args.deck_path, config_path=args.config_path, apkg_out=args.apkg_out,
+            update_existing=args.update_existing,
         )
     if args.command == "export-note-types":
         return cmd_export_note_types(args.config_path)

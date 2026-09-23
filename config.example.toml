@@ -9,10 +9,6 @@ ankiconnect_url = "http://localhost:8765"
 # Trigger an AnkiWeb sync after a successful import (pushes cards to phone).
 sync_after_import = true
 
-[decks]
-# Default deck when none is given on the command line.
-default_deck = "Inbox"
-
 [tags]
 # Every auto-generated card gets this tag so they're easy to find/bulk-edit.
 auto_tag = "auto"

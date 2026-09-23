@@ -1,9 +1,9 @@
 """The mnemo CLI: one entry point, subcommands for each pipeline stage.
 
 mnemo ingest <source> [--ocr] [--lang eng] [--extract-images DIR]
-mnemo draft <source> -o cards.csv [--ocr] [--lang eng] [--deferred deferred.md]
-mnemo audit cards.csv
-mnemo import cards.csv --deck DECK [--config config.toml] [--apkg-out deck.apkg]
+mnemo draft <source> --deck DECK -o deck.mnemo.yaml [--directions MODE]
+mnemo audit deck.mnemo.yaml
+mnemo import deck.mnemo.yaml [--config config.toml] [--apkg-out deck.apkg]
 mnemo export-note-types [--config config.toml]
 
 --lang is a Tesseract language code (default "eng"); use "fil" for Filipino/
@@ -14,14 +14,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from mnemo.anki.connect import AnkiConnect, AnkiConnectError
 from mnemo.anki.export import export_apkg
 from mnemo.anki.note_types import MONO_NOTE_TYPES, note_type_for, render_fields
 from mnemo.audit import build_report
-from mnemo.card import Card, read_cards, write_cards
+from mnemo.card import Card
 from mnemo.config import Config, load_config
+from mnemo.deck import Deck, cards_for_import, read_deck, write_deck
 from mnemo.draft import draft_cards, write_deferred
 from mnemo.ingest import ingest
 
@@ -51,16 +53,23 @@ def cmd_draft(
     cards_out: Path,
     deferred_out: Path | None = None,
     *,
+    deck: str,
+    directions: str = "term-to-definition",
     ocr: bool = False,
     language: str = "eng",
     pages: tuple[int, int] | None = None,
     prose_language: str | None = None,
 ) -> int:
+    _require_deck_manifest_path(cards_out)
     chunks = ingest(
         source, ocr=ocr, language=language, pages=pages, prose_language=prose_language,
     )
-    cards, deferred = draft_cards(chunks)
-    write_cards(cards_out, cards)
+    cards, deferred = draft_cards(chunks, directions=directions)
+    identified_cards = [
+        replace(card, card_id=f"draft-{index:04d}")
+        for index, card in enumerate(cards, start=1)
+    ]
+    write_deck(cards_out, Deck(name=deck, cards=identified_cards))
     # Named after cards_out's stem (not a fixed "deferred.md") so drafting
     # multiple sources into the same directory doesn't silently clobber a
     # previous run's deferred units.
@@ -70,10 +79,11 @@ def cmd_draft(
     return 0
 
 
-def cmd_audit(cards_csv: Path) -> int:
-    cards = read_cards(cards_csv)
-    report = build_report(cards)
-    print(f"{report.status}: {cards_csv}")
+def cmd_audit(deck_path: Path) -> int:
+    _require_deck_manifest_path(deck_path)
+    deck = read_deck(deck_path)
+    report = build_report(deck.cards)
+    print(f"{report.status}: {deck_path}")
     print(f"Cards: {report.card_count} | Errors: {report.errors} | Warnings: {report.warnings}")
     for violation in report.violations:
         card = f" card={violation.card_id}" if violation.card_id else ""
@@ -82,14 +92,22 @@ def cmd_audit(cards_csv: Path) -> int:
 
 
 def cmd_import(
-    cards_csv: Path, *, deck: str, config_path: Path | None, apkg_out: Path | None
+    deck_path: Path, *, config_path: Path | None, apkg_out: Path | None
 ) -> int:
+    _require_deck_manifest_path(deck_path)
     config = load_config(config_path)
-    cards = read_cards(cards_csv)
+    deck = read_deck(deck_path)
+    cards = cards_for_import(deck)
     ankiconnect = AnkiConnect(url=config.ankiconnect_url)
     if ankiconnect.is_available():
-        return _import_via_ankiconnect(cards, deck, config, ankiconnect)
-    return _import_via_apkg(cards, deck, apkg_out or cards_csv.with_suffix(".apkg"))
+        return _import_via_ankiconnect(cards, deck.name, config, ankiconnect)
+    default_apkg = deck_path.with_name(deck_path.name.removesuffix(".mnemo.yaml") + ".apkg")
+    return _import_via_apkg(cards, deck.name, apkg_out or default_apkg)
+
+
+def _require_deck_manifest_path(path: Path) -> None:
+    if not Path(path).name.endswith(".mnemo.yaml"):
+        raise ValueError("only .mnemo.yaml deck manifests are supported")
 
 
 def _import_via_ankiconnect(
@@ -174,9 +192,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep only PDF pages confidently classified as this prose language.",
     )
 
-    draft_parser = subparsers.add_parser("draft", help="Draft cards from a source.")
+    draft_parser = subparsers.add_parser("draft", help="Draft a deck manifest from a source.")
     draft_parser.add_argument("source", type=Path)
     draft_parser.add_argument("--output", "-o", type=Path, required=True, dest="cards_out")
+    draft_parser.add_argument("--deck", required=True, help="Destination deck name in the manifest.")
+    draft_parser.add_argument(
+        "--directions", choices=("term-to-definition", "definition-to-term", "both"),
+        default="term-to-definition",
+    )
     draft_parser.add_argument("--deferred", type=Path, default=None)
     draft_parser.add_argument("--ocr", action="store_true")
     draft_parser.add_argument("--lang", default="eng", dest="language")
@@ -186,12 +209,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep only PDF pages confidently classified as this prose language.",
     )
 
-    audit_parser = subparsers.add_parser("audit", help="Audit a cards CSV against the rubric.")
-    audit_parser.add_argument("cards_csv", type=Path)
+    audit_parser = subparsers.add_parser("audit", help="Audit a deck manifest against the rubric.")
+    audit_parser.add_argument("deck_path", type=Path, metavar="DECK.mnemo.yaml")
 
-    import_parser = subparsers.add_parser("import", help="Import a cards CSV into Anki.")
-    import_parser.add_argument("cards_csv", type=Path)
-    import_parser.add_argument("--deck", required=True)
+    import_parser = subparsers.add_parser("import", help="Import a deck manifest into Anki.")
+    import_parser.add_argument("deck_path", type=Path, metavar="DECK.mnemo.yaml")
     import_parser.add_argument("--config", type=Path, default=None, dest="config_path")
     import_parser.add_argument("--apkg-out", type=Path, default=None)
 
@@ -224,14 +246,15 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "draft":
         return cmd_draft(
             args.source, args.cards_out, args.deferred,
+            deck=args.deck, directions=args.directions,
             ocr=args.ocr, language=args.language,
             pages=args.pages, prose_language=args.prose_language,
         )
     if args.command == "audit":
-        return cmd_audit(args.cards_csv)
+        return cmd_audit(args.deck_path)
     if args.command == "import":
         return cmd_import(
-            args.cards_csv, deck=args.deck, config_path=args.config_path, apkg_out=args.apkg_out,
+            args.deck_path, config_path=args.config_path, apkg_out=args.apkg_out,
         )
     if args.command == "export-note-types":
         return cmd_export_note_types(args.config_path)

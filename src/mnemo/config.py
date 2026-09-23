@@ -40,7 +40,6 @@ class Config:
 
     ankiconnect_url: str = DEFAULT_URL
     sync_after_import: bool = True
-    default_deck: str = "Inbox"
     auto_tag: str = "auto"
     scheduler: str = "fsrs"
     desired_retention: float = 0.9
@@ -67,7 +66,6 @@ def load_config(path: str | Path | None) -> Config:
         raise ConfigError(f"{path} could not be read: {exc}") from exc
 
     anki = _table(data, "anki")
-    decks = _table(data, "decks")
     tags = _table(data, "tags")
     scheduler_table = _table(data, "scheduler")
     targets = _table(data, "card_targets")
@@ -75,7 +73,6 @@ def load_config(path: str | Path | None) -> Config:
     config = Config(
         ankiconnect_url=anki.get("ankiconnect_url", defaults.ankiconnect_url),
         sync_after_import=anki.get("sync_after_import", defaults.sync_after_import),
-        default_deck=decks.get("default_deck", defaults.default_deck),
         auto_tag=tags.get("auto_tag", defaults.auto_tag),
         scheduler=scheduler_table.get("scheduler", defaults.scheduler),
         desired_retention=scheduler_table.get(
@@ -106,8 +103,6 @@ def _validate_config(config: Config) -> None:
     _validate_ankiconnect_url(config.ankiconnect_url)
     if not isinstance(config.sync_after_import, bool):
         raise ConfigError("anki.sync_after_import must be true or false")
-    if not isinstance(config.default_deck, str) or not config.default_deck.strip():
-        raise ConfigError("decks.default_deck must be a non-empty string")
     if (
         not isinstance(config.auto_tag, str)
         or not config.auto_tag.strip()

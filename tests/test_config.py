@@ -14,7 +14,6 @@ def test_defaults_when_no_file(tmp_path):
     assert cfg == Config()
     assert cfg.ankiconnect_url == "http://localhost:8765"
     assert cfg.sync_after_import is True
-    assert cfg.default_deck == "Inbox"
     assert cfg.auto_tag == "auto"
     assert cfg.scheduler == "fsrs"
     assert cfg.desired_retention == 0.9
@@ -35,8 +34,6 @@ def test_loads_values_from_toml(tmp_path):
         "[anki]\n"
         'ankiconnect_url = "http://localhost:9999"\n'
         "sync_after_import = false\n"
-        "[decks]\n"
-        'default_deck = "Scratch"\n'
         "[tags]\n"
         'auto_tag = "mnemo"\n'
         "[scheduler]\n"
@@ -46,7 +43,6 @@ def test_loads_values_from_toml(tmp_path):
     cfg = load_config(toml)
     assert cfg.ankiconnect_url == "http://localhost:9999"
     assert cfg.sync_after_import is False
-    assert cfg.default_deck == "Scratch"
     assert cfg.auto_tag == "mnemo"
     assert cfg.desired_retention == 0.85
     assert cfg.new_cards_per_day == 10
@@ -171,13 +167,6 @@ def test_non_bool_sync_after_import_is_rejected(tmp_path):
     toml = tmp_path / "config.toml"
     toml.write_text('[anki]\nsync_after_import = "yes"\n')
     with pytest.raises(ConfigError, match="sync_after_import"):
-        load_config(toml)
-
-
-def test_empty_default_deck_is_rejected(tmp_path):
-    toml = tmp_path / "config.toml"
-    toml.write_text('[decks]\ndefault_deck = "   "\n')
-    with pytest.raises(ConfigError, match="default_deck"):
         load_config(toml)
 
 

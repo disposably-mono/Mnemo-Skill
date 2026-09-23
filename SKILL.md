@@ -14,11 +14,16 @@ One installed command, `mnemo`, with subcommands for each pipeline stage:
 
 ```bash
 mnemo ingest <source> [--ocr] [--lang eng] [--extract-images DIR]
-mnemo draft <source> -o cards.csv [--ocr] [--lang eng] [--deferred deferred.md]
-mnemo audit cards.csv
-mnemo import cards.csv --deck DECK [--config config.toml] [--apkg-out deck.apkg]
+mnemo draft <source> --deck DECK -o deck.mnemo.yaml [--directions MODE] [--ocr] [--lang eng] [--deferred deferred.md]
+mnemo audit deck.mnemo.yaml
+mnemo import deck.mnemo.yaml [--config config.toml] [--apkg-out deck.apkg]
 mnemo export-note-types [--config config.toml]
 ```
+
+`--deck` is required when drafting and supplies the deck name stored in the
+manifest. `--directions` accepts `term-to-definition` (the default),
+`definition-to-term`, or `both`. Mnemo reads and writes `.mnemo.yaml` deck
+manifests; CSV input and CSV export are intentionally unsupported.
 
 Supported source formats: Markdown/plain text (`.md`, `.txt`), PDF, PPTX,
 DOCX. Web pages are ingested by URL through `mnemo.ingest.web.ingest_web()`
@@ -36,7 +41,7 @@ Mnemo divides labor by what each layer does best. Deterministic code ingests
 and **drafts** only what it can confidently ground; the agent (you)
 **authors** the rest. The drafter never invents a prompt it cannot ground —
 prose it cannot parse is left in `deferred.md` for you to author. Do not
-treat the generated CSV as a finished deck.
+treat the generated YAML manifest as a finished deck.
 
 1. Identify the source, deck, and expected prerequisite knowledge.
 
@@ -53,31 +58,31 @@ treat the generated CSV as a finished deck.
 3. **Draft (deterministic).** Run
 
    ```bash
-   mnemo draft notes.md -o cards.csv
+   mnemo draft notes.md --deck "Mnemo::Course::Module" -o module.mnemo.yaml
    ```
 
    This grounds only what it can confidently pattern-match: explicit `Q:`/`A:`
    blocks, `question :: answer` pairs, tab-separated pairs, `Term: definition`
    lines, and a bulleted list under a clear stem line. Everything else is
    written to `<cards>.deferred.md` with the source excerpt and a reason —
-   never guessed at. The CSV is a draft.
+   never guessed at. The YAML manifest is a draft.
 
 4. **Author deferred units and strengthen weak drafts (you).** This is the
    step deterministic code cannot do. For every unit in `deferred.md`, and
    every card the audit flags (`ATOMICITY_REVIEW`, `THIN_EXPLANATION`,
-   `GENERIC_PROMPT`), write or rewrite the card directly in the CSV following
+   `GENERIC_PROMPT`), write or rewrite the card directly in the YAML manifest following
    the Required Card Contract and Generation Rules below. Turn prose into one
-   atomic, specifically phrased prompt whose `Extra` explains *why* the fact
+   atomic, specifically phrased prompt whose `extra` explains *why* the fact
    holds. Leave genuinely unsupported units deferred — never fabricate a
    prompt to clear a warning.
 
-5. Add a source image only when it teaches visual or spatial knowledge, via
-   Markdown image syntax or the `Image` CSV column.
+5. Add a source image only when it teaches visual or spatial knowledge, in
+   the card's `image` field using Markdown image syntax.
 
 6. **Audit (deterministic).** Run the independent rubric audit:
 
    ```bash
-   mnemo audit cards.csv
+   mnemo audit module.mnemo.yaml
    ```
 
    Errors block import; warnings require review against the source.
@@ -93,7 +98,7 @@ treat the generated CSV as a finished deck.
 9. **Import.**
 
    ```bash
-   mnemo import cards.csv --deck "Mnemo::Course::Module"
+   mnemo import module.mnemo.yaml
    ```
 
    Tries AnkiConnect first (Anki desktop must be running with the
@@ -106,16 +111,17 @@ treat the generated CSV as a finished deck.
 
 ## Required Card Contract
 
-The `cards.csv` contains these fields (header row):
+Each YAML manifest contains a required deck `name` and a list of `cards`.
+Cards use these fields:
 
 ```
-Front,Back,Extra,Mnemonic,CardType,Tags,Image,Topic,Source,CardID,Confidence
+front,back,extra,mnemonic,card_type,tags,image,topic,source,card_id,confidence
 ```
 
-- `Front`, `Back`, `CardType` are required and non-empty.
-- `Extra`, `Mnemonic`, `Tags` may be blank but should be filled in during
+- `front`, `back`, `card_type` are required and non-empty.
+- `extra`, `mnemonic`, `tags` may be blank but should be filled in during
   authoring (step 4) per the Generation Rules.
-- `Image`, `Topic`, `Source`, `CardID`, `Confidence` are optional
+- `image`, `topic`, `source`, `card_id`, `confidence` are optional
   traceability/validation fields.
 
 Use only these card types:

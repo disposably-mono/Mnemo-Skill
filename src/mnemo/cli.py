@@ -198,9 +198,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep only PDF pages confidently classified as this prose language.",
     )
 
-    draft_parser = subparsers.add_parser("draft", help="Draft a deck manifest from a source.")
+    draft_parser = subparsers.add_parser("draft", help="Draft a YAML deck manifest from a source.")
     draft_parser.add_argument("source", type=Path)
-    draft_parser.add_argument("--output", "-o", type=Path, required=True, dest="cards_out")
+    draft_parser.add_argument(
+        "--output", "-o", type=Path, required=True, dest="cards_out",
+        metavar="DECK.mnemo.yaml", help="Output YAML deck manifest (must end in .mnemo.yaml).",
+    )
     draft_parser.add_argument("--deck", required=True, help="Destination deck name in the manifest.")
     draft_parser.add_argument(
         "--directions", choices=("term-to-definition", "definition-to-term", "both"),

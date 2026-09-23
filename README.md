@@ -18,11 +18,16 @@ python -m venv .venv
 
 ```bash
 mnemo ingest notes.pdf --ocr              # normalize a source into text chunks
-mnemo draft notes.md -o cards.csv         # deterministic draft + deferred.md
-# ... author deferred units and weak cards directly in cards.csv ...
-mnemo audit cards.csv                     # rubric validation
-mnemo import cards.csv --deck "Mnemo::Course::Module"
+mnemo draft notes.md --deck "Mnemo::Course::Module" -o module.mnemo.yaml
+# ... author deferred units and weak cards in module.mnemo.yaml ...
+mnemo audit module.mnemo.yaml             # rubric validation
+mnemo import module.mnemo.yaml
 ```
+
+Deck names are required when drafting and are stored in the manifest. Draft
+directions are `term-to-definition` (default), `definition-to-term`, or
+`both`, selected with `--directions`. Decks use YAML manifests only: CSV input
+and CSV export are intentionally unsupported.
 
 See [SKILL.md](SKILL.md) for the full agent-facing workflow, card contract,
 and generation rules.

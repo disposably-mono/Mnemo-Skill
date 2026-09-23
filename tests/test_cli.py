@@ -41,6 +41,12 @@ def test_build_parser_has_all_five_subcommands():
     }
 
 
+def test_help_describes_yaml_only_deck_workflow(capsys):
+    with pytest.raises(SystemExit):
+        main(["draft", "--help"])
+    assert ".mnemo.yaml" in capsys.readouterr().out
+
+
 def test_cmd_draft_writes_cards_and_deferred(tmp_path, capsys):
     source = tmp_path / "notes.md"
     source.write_text(

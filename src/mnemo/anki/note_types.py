@@ -226,7 +226,7 @@ class RenderError(ValueError):
 def render_fields(card, note_type: NoteType) -> dict[str, str]:
     """Render a mnemo.card.Card into this note type's exact field set.
 
-    Extra/Mnemonic are CSV-contract fields for human/agent authoring
+    Extra/Mnemonic are manifest fields for human/agent authoring
     convenience; note types without their own Extra field (Basic,
     Overlapping) fold that text into their primary answer field instead of
     silently dropping it. Dispatches on identity (not name) so a caller

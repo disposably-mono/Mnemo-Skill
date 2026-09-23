@@ -111,18 +111,28 @@ treat the generated YAML manifest as a finished deck.
 
 ## Required Card Contract
 
-Each YAML manifest contains a required deck `name` and a list of `cards`.
-Cards use these fields:
+Each `.mnemo.yaml` manifest has this shape:
 
-```
-front,back,extra,mnemonic,card_type,tags,image,topic,source,card_id,confidence
+```yaml
+formatVersion: 1
+deck:
+  name: "Mnemo::Course::Module"
+  tags: [course]
+cards:
+  - id: course-module-atp
+    front: "What does ATP stand for?"
+    back: "Adenosine triphosphate."
+    cardType: qa
+    tags: [energy]
 ```
 
-- `front`, `back`, `card_type` are required and non-empty.
-- `extra`, `mnemonic`, `tags` may be blank but should be filled in during
-  authoring (step 4) per the Generation Rules.
-- `image`, `topic`, `source`, `card_id`, `confidence` are optional
-  traceability/validation fields.
+`formatVersion: 1`, a non-empty `deck.name`, and a `cards` list are required.
+Each card requires a non-empty `id`, `front`, and `back`; IDs must be unique
+within the manifest. `deck.tags` and card `tags` are optional lists of
+single-word tags, not comma-separated strings. `cardType` is optional and
+defaults to `qa`. Optional card fields are `extra`, `mnemonic`, `image`,
+`topic`, `source`, and `confidence` (a number from 0 to 1). Use the YAML keys
+shown here: `cardType` and `id`, not internal Python names.
 
 Use only these card types:
 
@@ -142,7 +152,7 @@ These bind the agent when authoring or rewriting cards (step 4):
 
 1. Test one independently gradable fact per card.
 2. Split detectable sentence boundaries, independent clauses, and enumerations.
-3. Keep `Front` below 150 characters. Shorten or split anything longer.
+3. Keep `front` at most 150 characters. Shorten or split anything longer.
    (Character length, not word count -- particle-heavy languages like
    Tagalog need more words for the same complexity an English sentence
    expresses more densely.)
@@ -150,13 +160,13 @@ These bind the agent when authoring or rewriting cards (step 4):
 5. Choose card format from the knowledge structure. Never manufacture variety.
 6. Add an acronym or visual association when a source concept has at least
    three components, even after its components become separate cards.
-7. Begin `Extra` with `Explanation:` and include enough explanation to
+7. Begin `extra` with `Explanation:` and include enough explanation to
    support understanding before memorization.
 8. Preserve qualifications, exceptions, units, formula domains, uncertainty,
    and competing interpretations.
 9. Interleave topics; avoid adjacent cards from the same topic when another
    topic is available.
-10. Preserve source provenance (`Source`) and a stable `CardID` when possible.
+10. Preserve source provenance (`source`) and a stable `id` when possible.
 11. Do not import until every deferred unit is authored, deferred with a
     reason, or intentionally omitted, and the user has approved the draft.
 

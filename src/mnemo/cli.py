@@ -67,7 +67,7 @@ def cmd_draft(
         source, ocr=ocr, language=language, pages=pages, prose_language=prose_language,
     )
     cards, deferred = draft_cards(chunks, directions=directions)
-    context = (deck, str(source), directions, ocr, language, pages, prose_language)
+    context = (deck, str(Path(source).resolve()), directions, ocr, language, pages, prose_language)
     context_hash = hashlib.sha256(
         json.dumps(context, ensure_ascii=False).encode("utf-8")
     ).hexdigest()

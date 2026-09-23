@@ -259,6 +259,33 @@ def test_draft_ids_distinguish_deck_and_source_contexts(tmp_path):
     assert _to_genanki_note(repeated, MONO_BASIC).guid == _to_genanki_note(cards[0], MONO_BASIC).guid
 
 
+def test_draft_ids_resolve_relative_source_across_working_directories(tmp_path, monkeypatch):
+    from mnemo.anki.export import _to_genanki_note
+    from mnemo.anki.note_types import MONO_BASIC
+
+    first_dir = tmp_path / "course-a"
+    second_dir = tmp_path / "course-b"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    for directory in (first_dir, second_dir):
+        (directory / "notes.md").write_text("Q: What is ATP?\nA: Adenosine triphosphate.\n")
+
+    monkeypatch.chdir(first_dir)
+    assert cmd_draft("notes.md", first_dir / "deck.mnemo.yaml", deck="Biology") == 0
+    first_card = read_deck(first_dir / "deck.mnemo.yaml").cards[0]
+
+    monkeypatch.chdir(second_dir)
+    assert cmd_draft("notes.md", second_dir / "deck.mnemo.yaml", deck="Biology") == 0
+    second_card = read_deck(second_dir / "deck.mnemo.yaml").cards[0]
+
+    assert first_card.card_id != second_card.card_id
+    assert _to_genanki_note(first_card, MONO_BASIC).guid != _to_genanki_note(second_card, MONO_BASIC).guid
+
+    monkeypatch.chdir(first_dir)
+    assert cmd_draft("notes.md", first_dir / "deck.mnemo.yaml", deck="Biology") == 0
+    assert read_deck(first_dir / "deck.mnemo.yaml").cards[0].card_id == first_card.card_id
+
+
 def test_draft_requires_deck_name(tmp_path):
     source = tmp_path / "notes.md"
     source.write_text("Q: What is ATP?\nA: Adenosine triphosphate.\n")

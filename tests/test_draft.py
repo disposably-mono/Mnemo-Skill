@@ -88,6 +88,41 @@ def test_topic_line_sets_topic_for_following_cards():
     assert cards[0].topic == "Cell Biology"
 
 
+def test_lettered_section_header_sets_topic(tmp_path=None):
+    text = "A. Wikang Panturo\n\nQ: Ano ang wikang panturo?\nA: Ang ginagamit sa pagtuturo.\n"
+    cards, deferred = draft_cards([Chunk(text=text, source="wika.md")])
+
+    assert deferred == []
+    assert cards[0].topic == "Wikang Panturo"
+
+
+def test_lettered_section_header_splits_from_preceding_paragraph_with_no_blank_line():
+    text = (
+        "Some closing sentence of the previous section.\n"
+        "B. Varayti ng Wika\n"
+        "\n"
+        "Q: Ano ang dayalek?\n"
+        "A: Heograpikal na varayti ng wika.\n"
+    )
+    cards, deferred = draft_cards([Chunk(text=text, source="wika.md")])
+
+    assert len(deferred) == 1
+    assert deferred[0].text == "Some closing sentence of the previous section."
+    assert len(cards) == 1
+    assert cards[0].topic == "Varayti ng Wika"
+
+
+def test_single_capital_letter_sentence_is_not_treated_as_section_header():
+    # "A. Reyes" (an abbreviated name) must not be mistaken for a lettered
+    # section header just because it matches "<capital letter>. <text>".
+    text = "A. Reyes ang pangalan ng may-akda ng aklat na ito.\n"
+    cards, deferred = draft_cards([Chunk(text=text, source="wika.md")])
+
+    assert cards == []
+    assert len(deferred) == 1
+    assert "A. Reyes" in deferred[0].text
+
+
 def test_unrecognized_prose_is_deferred_not_fabricated():
     text = "Mitochondria have a double membrane structure that is quite complex."
     cards, deferred = draft_cards([Chunk(text=text, source="notes.md")])

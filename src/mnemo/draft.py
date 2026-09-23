@@ -19,6 +19,12 @@ from mnemo.ingest import Chunk
 
 _HEADING = re.compile(r"^#{1,6}\s+(.+)$")
 _TOPIC_LINE = re.compile(r"^Topic:\s*(.+)$", re.IGNORECASE)
+# Lettered section headers ("A. Wikang Panturo") are common in textbook-style
+# prose (notably Philippine educational material) but aren't Markdown
+# headings. Require no trailing sentence punctuation and a short line so an
+# abbreviated name ("A. Reyes ang pangalan...") isn't mistaken for one.
+_LETTERED_SECTION = re.compile(r"^([A-Z])\.\s+(.+)$")
+_MAX_SECTION_HEADER_WORDS = 15
 _Q_LINE = re.compile(r"^Q:\s*(.+)$")
 _A_LINE = re.compile(r"^A:\s*(.+)$")
 _EXTRA_LINE = re.compile(r"^Extra:\s*(.+)$")
@@ -77,14 +83,42 @@ def draft_cards(
 
 
 def _split_blocks(text: str) -> list[str]:
-    return [block.strip() for block in re.split(r"\n\s*\n", text.strip()) if block.strip()]
+    normalized = _isolate_section_headers(text.strip())
+    return [block.strip() for block in re.split(r"\n\s*\n", normalized) if block.strip()]
+
+
+def _isolate_section_headers(text: str) -> str:
+    """Force a lettered section header to start its own block even when the
+    source has no blank line before it (common in copy-pasted textbook
+    prose, e.g. Philippine educational material's "A./B./C." subsections)."""
+    lines = text.split("\n")
+    out_lines: list[str] = []
+    for index, line in enumerate(lines):
+        if index > 0 and out_lines and out_lines[-1].strip() and _section_header_title(line):
+            out_lines.append("")
+        out_lines.append(line)
+    return "\n".join(out_lines)
+
+
+def _section_header_title(line: str) -> str | None:
+    match = _LETTERED_SECTION.match(line.strip())
+    if match is None:
+        return None
+    title = match.group(2).strip()
+    if title.endswith((".", "!", "?")) or len(title.split()) > _MAX_SECTION_HEADER_WORDS:
+        return None
+    return title
 
 
 def _extract_topic(block: str) -> str | None:
-    """A block that is only a heading or Topic: line sets the running topic."""
+    """A block that is only a heading/Topic:/lettered-section line sets the
+    running topic."""
     lines = block.splitlines()
     if len(lines) != 1:
         return None
+    section_title = _section_header_title(lines[0])
+    if section_title is not None:
+        return section_title
     match = _HEADING.match(lines[0]) or _TOPIC_LINE.match(lines[0])
     return match.group(1).strip() if match else None
 
